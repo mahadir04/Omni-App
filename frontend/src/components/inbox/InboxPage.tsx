@@ -78,7 +78,7 @@ export default function InboxPage() {
       <Sidebar unreadCount={totalUnread} />
 
       {/* ── Inbox list panel ──────────────────────────────────────────── */}
-      <div className="inbox-panel">
+      <div className={`inbox-panel ${selectedId ? 'has-selection' : ''}`}>
         <div className="inbox-header">
           <div className="inbox-title">
             Inbox
@@ -153,7 +153,7 @@ export default function InboxPage() {
           onRefreshList={loadConversations}
         />
       ) : (
-        <div className="empty-state" style={{ flex: 1 }}>
+        <div className="empty-state empty-state-desktop" style={{ flex: 1 }}>
           <div style={{ fontSize: 40 }}>💬</div>
           <div className="empty-state-title">Select a conversation</div>
           <div className="empty-state-desc">Choose a conversation from the list to view it</div>
