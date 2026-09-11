@@ -11,8 +11,17 @@ export function useWebSocket(
 
   const connect = useCallback(() => {
     if (!userId) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws/${userId}`);
+    let wsHost = window.location.host;
+    let wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl && apiUrl.startsWith('http')) {
+      const urlObj = new URL(apiUrl);
+      wsHost = urlObj.host;
+      wsProto = urlObj.protocol === 'https:' ? 'wss' : 'ws';
+    }
+
+    const ws = new WebSocket(`${wsProto}://${wsHost}/ws/${userId}`);
 
     ws.onmessage = (e) => {
       try {

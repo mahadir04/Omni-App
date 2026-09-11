@@ -26,6 +26,7 @@ yarn-error.log*
 # Docker & DB
 pgdata/
 .docker/
+cloudflared.exe
 
 # IDE / OS
 .idea/
