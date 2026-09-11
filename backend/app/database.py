@@ -31,7 +31,11 @@ engine = create_async_engine(
     echo=settings.debug,
     pool_size=5,
     max_overflow=10,
-    connect_args={"ssl": ssl_ctx},
+    connect_args={
+        "ssl": ssl_ctx,
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    },
 )
 
 async_session_factory = async_sessionmaker(
