@@ -26,14 +26,21 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS ─────────────────────────────────────────────────────────────
-    origins = [settings.frontend_url, "http://localhost:5173", "http://localhost:80", "http://localhost"]
-    if settings.frontend_url not in origins:
+    origins = [
+        settings.frontend_url,
+        "https://omni-app-mu.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:80",
+        "http://localhost",
+        "http://localhost:3000",
+    ]
+    if settings.frontend_url and settings.frontend_url not in origins:
         origins.append(settings.frontend_url)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_origin_regex=r"https?://.*\.railway\.app",
+        allow_origin_regex=r"https?://.*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
