@@ -1,12 +1,10 @@
 """FastAPI application factory — CORS, middleware, router registration, WebSocket."""
 
 from contextlib import asynccontextmanager
-from typing import Callable
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.websocket import ws_manager
@@ -15,48 +13,9 @@ from app.websocket import ws_manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle events."""
-    # Startup: any init work (e.g., verifying DB connection) goes here
+    # Startup: verify DB connection or run light checks if needed
     yield
     # Shutdown: cleanup
-
-
-class DynamicCORSMiddleware(BaseHTTPMiddleware):
-    """Middleware that echoes back the request Origin header so any origin is allowed.
-    
-    This is the only reliable way to support credentials=true from any origin,
-    since browsers reject Access-Control-Allow-Origin: * when credentials are used.
-    """
-
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        origin = request.headers.get("origin", "")
-
-        # Handle CORS preflight (OPTIONS) requests
-        if request.method == "OPTIONS" and origin:
-            response = Response(
-                content="OK",
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With",
-                    "Access-Control-Max-Age": "600",
-                    "Vary": "Origin",
-                },
-            )
-            return response
-
-        # Handle regular requests
-        response = await call_next(request)
-
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With"
-            response.headers["Vary"] = "Origin"
-
-        return response
 
 
 def create_app() -> FastAPI:
@@ -67,8 +26,39 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── Dynamic CORS (works with credentials from any origin) ─────────────
-    app.add_middleware(DynamicCORSMiddleware)
+    # ── CORS Middleware ──────────────────────────────────────────────────
+    origins = [
+        "https://omni-app-mu.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:80",
+        "http://localhost",
+        "http://localhost:3000",
+    ]
+    if settings.frontend_url and settings.frontend_url not in origins:
+        origins.append(settings.frontend_url)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_origin_regex=r"https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+
+    # ── Global Exception Handler to ensure CORS headers on 500 errors ────
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        origin = request.headers.get("origin", "*")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal Server Error: {str(exc)}"},
+            headers={
+                "Access-Control-Allow-Origin": origin if origin != "*" else "https://omni-app-mu.vercel.app",
+                "Access-Control-Allow-Credentials": "true",
+            },
+        )
 
     # ── Routers ──────────────────────────────────────────────────────────
     from app.routers.auth import router as auth_router
