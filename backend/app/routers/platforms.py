@@ -68,107 +68,124 @@ async def connect_platform(
         "status": "active",
     })
 
-    # Check for existing connection
-    result = await db.execute(
-        select(PlatformConnection).where(
-            PlatformConnection.user_id == current_user.id,
-            PlatformConnection.platform == body.platform,
-            PlatformConnection.external_account_id == body.external_account_id,
+    try:
+        # Check for existing connection by platform & user
+        result = await db.execute(
+            select(PlatformConnection).where(
+                PlatformConnection.user_id == current_user.id,
+                PlatformConnection.platform == body.platform,
+            )
         )
-    )
-    existing = result.scalar_one_or_none()
-    if existing:
-        # Re-auth: update tokens + status + metadata
-        existing.access_token_enc = body.access_token
-        existing.refresh_token_enc = body.refresh_token
-        existing.status = "connected"
-        existing.metadata_ = meta
+        existing = result.scalar_one_or_none()
+        if existing:
+            # Re-auth: update tokens + status + metadata
+            existing.external_account_id = body.external_account_id
+            existing.access_token_enc = body.access_token or "token"
+            existing.refresh_token_enc = body.refresh_token
+            existing.status = "connected"
+            existing.metadata_ = meta
+            await db.flush()
+            conn = existing
+        else:
+            conn = PlatformConnection(
+                user_id=current_user.id,
+                platform=body.platform,
+                external_account_id=body.external_account_id,
+                access_token_enc=body.access_token or "token",
+                refresh_token_enc=body.refresh_token,
+                status="connected",
+                metadata_=meta,
+            )
+            db.add(conn)
+            await db.flush()
+
+        # ── Create / Retrieve System Contact for this Platform ───────────
+        contact_res = await db.execute(
+            select(Contact).where(
+                Contact.user_id == current_user.id,
+                Contact.platform == body.platform,
+                Contact.platform_handle == f"system@{body.platform}",
+            )
+        )
+        contact = contact_res.scalar_one_or_none()
+        if not contact:
+            contact = Contact(
+                user_id=current_user.id,
+                display_name=f"{body.platform.capitalize()} Assistant",
+                platform=body.platform,
+                platform_handle=f"system@{body.platform}",
+                avatar_url=None,
+            )
+            db.add(contact)
+            await db.flush()
+
+        # ── Create or Find Welcome Notification Conversation & Message ───
+        conv_res = await db.execute(
+            select(Conversation).where(
+                Conversation.user_id == current_user.id,
+                Conversation.contact_id == contact.id,
+            )
+        )
+        conv = conv_res.scalar_one_or_none()
+        if not conv:
+            conv = Conversation(
+                user_id=current_user.id,
+                contact_id=contact.id,
+                platform=body.platform,
+                status="open",
+                label="action",
+                unread_count=1,
+                last_message_at=datetime.now(timezone.utc),
+            )
+            db.add(conv)
+            await db.flush()
+        else:
+            conv.unread_count = (conv.unread_count or 0) + 1
+            conv.last_message_at = datetime.now(timezone.utc)
+            conv.status = "open"
+
+        welcome_text = (
+            f"🎉 **{body.platform.capitalize()} Connected Successfully!**\n\n"
+            f"Your profile **{profile_name}** ({account_handle}) is now linked to Omni. "
+            f"All incoming messages, client queries, and notifications will be synchronized in real-time "
+            f"with AI sentiment tracking, action extraction, and automated reply drafts."
+        )
+
+        msg = Message(
+            conversation_id=conv.id,
+            direction="inbound",
+            sender="contact",
+            content=welcome_text,
+            platform_msg_id=f"conn_notify_{uuid.uuid4()}",
+        )
+        db.add(msg)
         await db.flush()
-        conn = existing
-    else:
-        conn = PlatformConnection(
+
+        # AI Analysis for the welcome notification
+        ai_ana = AIAnalysis(
+            message_id=msg.id,
+            intent="platform_connected",
+            sentiment="positive",
+            confidence=Decimal("99.00"),
+            suggested_reply=f"Thank you! Ready to manage {body.platform.capitalize()} messages.",
+            key_action=f"Synchronize {body.platform.capitalize()} inbox",
+            requires_human_review=False,
+        )
+        db.add(ai_ana)
+
+        await log_action(
+            db,
             user_id=current_user.id,
-            platform=body.platform,
-            external_account_id=body.external_account_id,
-            access_token_enc=body.access_token,
-            refresh_token_enc=body.refresh_token,
-            status="connected",
-            metadata_=meta,
+            actor="user",
+            action="connect_platform",
+            details={"platform": body.platform, "account": body.external_account_id, "profile": profile_name},
         )
-        db.add(conn)
-        await db.flush()
+        await db.commit()
+        await db.refresh(conn)
 
-    # ── Create / Retrieve System Contact for this Platform ───────────────
-    contact_res = await db.execute(
-        select(Contact).where(
-            Contact.user_id == current_user.id,
-            Contact.platform == body.platform,
-            Contact.platform_handle == f"system@{body.platform}",
-        )
-    )
-    contact = contact_res.scalar_one_or_none()
-    if not contact:
-        contact = Contact(
-            user_id=current_user.id,
-            display_name=f"{body.platform.capitalize()} Assistant",
-            platform=body.platform,
-            platform_handle=f"system@{body.platform}",
-            avatar_url=None,
-        )
-        db.add(contact)
-        await db.flush()
-
-    # ── Create Welcome Notification Conversation & Message ──────────────
-    conv = Conversation(
-        user_id=current_user.id,
-        contact_id=contact.id,
-        platform=body.platform,
-        status="open",
-        label="integration",
-        unread_count=1,
-        last_message_at=datetime.now(timezone.utc),
-    )
-    db.add(conv)
-    await db.flush()
-
-    welcome_text = (
-        f"🎉 **{body.platform.capitalize()} Connected Successfully!**\n\n"
-        f"Your profile **{profile_name}** ({account_handle}) is now linked to Omni. "
-        f"All incoming messages, client queries, and notifications will be synchronized in real-time "
-        f"with AI sentiment tracking, action extraction, and automated reply drafts."
-    )
-
-    msg = Message(
-        conversation_id=conv.id,
-        direction="inbound",
-        sender="contact",
-        content=welcome_text,
-        platform_msg_id=f"conn_notify_{conn.id}",
-    )
-    db.add(msg)
-    await db.flush()
-
-    # AI Analysis for the welcome notification
-    ai_ana = AIAnalysis(
-        message_id=msg.id,
-        intent="platform_connected",
-        sentiment="positive",
-        confidence=Decimal("99.00"),
-        suggested_reply=f"Thank you! Ready to manage {body.platform.capitalize()} messages.",
-        key_action=f"Synchronize {body.platform.capitalize()} inbox",
-        requires_human_review=False,
-    )
-    db.add(ai_ana)
-
-    await log_action(
-        db,
-        user_id=current_user.id,
-        actor="user",
-        action="connect_platform",
-        details={"platform": body.platform, "account": body.external_account_id, "profile": profile_name},
-    )
-    await db.commit()
-    await db.refresh(conn)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to connect platform: {str(e)}")
 
     # ── Broadcast WebSocket Event ────────────────────────────────────────
     await ws_manager.send_to_user(

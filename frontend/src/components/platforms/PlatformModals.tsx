@@ -44,9 +44,10 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
       onClose();
       setProfileName('');
       setAccountId('');
-    } catch (err: unknown) {
+    } catch (err: any) {
       console.error(err);
-      setError('Failed to connect platform. Please check your credentials.');
+      const serverMsg = err?.response?.data?.detail || err?.message;
+      setError(serverMsg || 'Failed to connect platform. Please check your credentials.');
     } finally {
       setLoading(false);
     }
