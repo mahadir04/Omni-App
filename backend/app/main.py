@@ -27,7 +27,6 @@ def create_app() -> FastAPI:
 
     # ── CORS ─────────────────────────────────────────────────────────────
     origins = [
-        settings.frontend_url,
         "https://omni-app-mu.vercel.app",
         "http://localhost:5173",
         "http://localhost:80",
@@ -40,7 +39,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_origin_regex=r"https?://.*",
+        allow_origin_regex=r".*",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
