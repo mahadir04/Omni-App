@@ -19,6 +19,7 @@ const AVAILABLE_PLATFORMS = [
 
 export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModalProps) {
   const [selectedPlatform, setSelectedPlatform] = useState('whatsapp');
+  const [profileName, setProfileName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +35,13 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
     try {
       await connectPlatform({
         platform: selectedPlatform,
+        profile_name: profileName.trim() || undefined,
         external_account_id: accountId.trim() || undefined,
         access_token: 'mock-oauth-token',
       });
       onSuccess();
       onClose();
+      setProfileName('');
       setAccountId('');
     } catch (err: unknown) {
       console.error(err);
@@ -88,8 +91,19 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
               ))}
             </div>
 
+            <div className="form-group" style={{ marginTop: 12 }}>
+              <label className="form-label">Profile / Display Name</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. Acme Support or John Doe"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+              />
+            </div>
+
             <div className="form-group" style={{ marginTop: 8 }}>
-              <label className="form-label">Account Identifier / Handle</label>
+              <label className="form-label">Account Identifier / Handle / Email</label>
               <input
                 type="text"
                 className="form-input"

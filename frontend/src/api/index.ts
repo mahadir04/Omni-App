@@ -55,6 +55,8 @@ export const listPlatforms = () =>
 export const connectPlatform = (data: {
   platform: string;
   external_account_id?: string;
+  profile_name?: string;
+  metadata_?: Record<string, any>;
   access_token?: string;
 }) => api.post<PlatformConnection>('/platforms/connect', data).then((r) => r.data);
 

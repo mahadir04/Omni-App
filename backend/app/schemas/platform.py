@@ -18,8 +18,10 @@ class PlatformConnectionResponse(BaseModel):
 
 
 class PlatformConnectRequest(BaseModel):
-    platform: str  # whatsapp | slack | email | linkedin
+    platform: str  # whatsapp | slack | email | linkedin | sms
     external_account_id: str | None = None
+    profile_name: str | None = None
+    metadata_: dict | None = None
     # In a real implementation, the OAuth callback would provide the token.
     # For MVP/dev, accept it directly.
     access_token: str = "mock-token"

@@ -128,6 +128,8 @@ export default function PlatformsPage() {
               <div className="platform-grid">
                 {platforms.map((p) => {
                   const icon = PLATFORM_ICONS[p.platform];
+                  const profileName = p.metadata_?.profile_name || p.external_account_id || `${p.platform} Profile`;
+                  const accountHandle = p.external_account_id || p.metadata_?.account_id || 'Connected';
                   return (
                     <div className="platform-card" key={p.id}>
                       <div className="platform-card-header">
@@ -142,32 +144,57 @@ export default function PlatformsPage() {
                             p.status === 'connected' ? 'connected' : p.status === 'reauth_required' ? 'reauth' : 'offline'
                           }`}
                         >
-                          {p.status === 'connected' ? 'Connected' : p.status === 'reauth_required' ? 'Re-auth required' : 'Offline'}
+                          ● {p.status === 'connected' ? 'Active' : p.status === 'reauth_required' ? 'Re-auth required' : 'Offline'}
                         </span>
                       </div>
-                      <div className="platform-name">
+
+                      <div className="platform-name" style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>
                         {p.platform.charAt(0).toUpperCase() + p.platform.slice(1)}
                       </div>
-                      <div className="platform-meta">
-                        {p.status === 'connected' && (p.external_account_id ?? 'Active Stream')}
-                        {p.status === 'reauth_required' && 'Token expired'}
-                        {p.status === 'offline' && 'Disconnected'}
+
+                      {/* Connected Profile Details */}
+                      <div style={{
+                        marginTop: 10,
+                        padding: '10px 12px',
+                        background: 'var(--bg-secondary)',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 3,
+                      }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                          👤 {profileName}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                          {accountHandle}
+                        </div>
+                        {p.created_at && (
+                          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                            Synced since {new Date(p.created_at).toLocaleDateString()}
+                          </div>
+                        )}
                       </div>
-                      {p.status === 'reauth_required' ? (
-                        <button
-                          className="platform-card-btn reconnect-btn"
-                          onClick={() => handleReconnect(p)}
-                        >
-                          Reconnect
-                        </button>
-                      ) : (
-                        <button
-                          className="platform-card-btn"
-                          onClick={() => setSelectedPlatform(p)}
-                        >
-                          Platform Rules
-                        </button>
-                      )}
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        {p.status === 'reauth_required' ? (
+                          <button
+                            className="platform-card-btn reconnect-btn"
+                            style={{ flex: 1 }}
+                            onClick={() => handleReconnect(p)}
+                          >
+                            Reconnect
+                          </button>
+                        ) : (
+                          <button
+                            className="platform-card-btn"
+                            style={{ flex: 1 }}
+                            onClick={() => setSelectedPlatform(p)}
+                          >
+                            Platform Rules
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
