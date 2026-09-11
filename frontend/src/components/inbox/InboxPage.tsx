@@ -9,7 +9,7 @@ import Sidebar from '../layout/Sidebar';
 import { useAuthStore } from '../../store/authStore';
 
 const STATUS_FILTERS = ['All', 'Unread', 'Flagged'];
-const PLATFORM_FILTERS = ['All', 'WhatsApp', 'Slack', 'Email', 'LinkedIn'];
+const PLATFORM_FILTERS = ['All', 'Messenger', 'WhatsApp', 'Slack', 'Email', 'LinkedIn', 'SMS'];
 
 export default function InboxPage() {
   const { user } = useAuthStore();

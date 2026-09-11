@@ -1,17 +1,21 @@
 import type { ConversationListItem } from '../../types';
 
 const PLATFORM_COLORS: Record<string, string> = {
+  messenger: '#0084FF',
   whatsapp: '#25D366',
   slack: '#4A154B',
   linkedin: '#0A66C2',
   email: '#F59E0B',
+  sms: '#6366F1',
 };
 
 const PLATFORM_LETTERS: Record<string, string> = {
+  messenger: 'M',
   whatsapp: 'W',
   slack: 'S',
   linkedin: 'in',
   email: '@',
+  sms: 'SMS',
 };
 
 function formatTime(iso: string | null) {

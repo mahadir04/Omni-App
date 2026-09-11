@@ -36,9 +36,23 @@ async def _resolve_webhook_user(db: AsyncSession, platform: str) -> User | None:
     return fallback.scalars().first()
 
 
+@router.get("/webhooks/{platform}")
+async def verify_webhook(platform: str, request: Request):
+    """Handle Meta / Messenger / WhatsApp webhook verification challenge."""
+    params = request.query_params
+    hub_mode = params.get("hub.mode")
+    hub_challenge = params.get("hub.challenge")
+    hub_verify_token = params.get("hub.verify_token")
+
+    if hub_mode == "subscribe" and hub_challenge:
+        # Return challenge as plain text
+        return Response(content=hub_challenge, media_type="text/plain")
+    return {"status": "ok", "platform": platform}
+
+
 @router.post("/webhooks/{platform}")
 async def receive_webhook(platform: str, request: Request, db: DbSession):
-    """Receive live inbound webhook from an external platform (Twilio, Slack, Email, etc.)."""
+    """Receive live inbound webhook from an external platform (Twilio, Slack, Messenger, Email, etc.)."""
     content_type = request.headers.get("content-type", "")
 
     sender_name = "Incoming Contact"
@@ -67,6 +81,18 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
                 sender_handle = event.get("user", "slack_user")
                 sender_name = f"Slack User ({sender_handle})"
                 platform_msg_id = event.get("client_msg_id") or event.get("ts")
+            elif platform == "messenger" and "entry" in body:
+                # Meta / Facebook Messenger webhook payload format
+                entries = body.get("entry", [])
+                for entry in entries:
+                    for messaging in entry.get("messaging", []):
+                        if "message" in messaging:
+                            msg_obj = messaging.get("message", {})
+                            content = msg_obj.get("text", "")
+                            platform_msg_id = msg_obj.get("mid")
+                            sender_handle = str(messaging.get("sender", {}).get("id", "messenger_user"))
+                            sender_name = f"Messenger User ({sender_handle[-4:] if len(sender_handle) >= 4 else sender_handle})"
+                            break
             else:
                 # Generic JSON / Postmark / SendGrid / Custom
                 content = (

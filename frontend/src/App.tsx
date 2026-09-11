@@ -7,6 +7,7 @@ import InboxPage from './components/inbox/InboxPage';
 import AutomationPage from './components/automation/AutomationPage';
 import PlatformsPage from './components/platforms/PlatformsPage';
 import SettingsPage from './components/settings/SettingsPage';
+import NotificationManager from './components/notifications/NotificationManager';
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { token, isLoading } = useAuthStore();
@@ -35,6 +36,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <NotificationManager />
       <Routes>
         {/* Auth */}
         <Route path="/login" element={<LoginPage />} />

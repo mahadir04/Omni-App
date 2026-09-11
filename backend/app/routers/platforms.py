@@ -12,7 +12,7 @@ from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/api/platforms", tags=["platforms"])
 
-VALID_PLATFORMS = {"whatsapp", "slack", "email", "linkedin", "sms"}
+VALID_PLATFORMS = {"whatsapp", "slack", "email", "linkedin", "sms", "messenger"}
 
 
 @router.get("", response_model=list[PlatformConnectionResponse])

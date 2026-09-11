@@ -10,6 +10,7 @@ interface AddPlatformModalProps {
 }
 
 const AVAILABLE_PLATFORMS = [
+  { id: 'messenger', name: 'Messenger', color: '#0084FF', letter: 'M', placeholder: 'm.me/yourpage or Page ID', desc: 'Facebook & Meta Messenger' },
   { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', letter: 'W', placeholder: '+1 (555) 234-5678', desc: 'Direct client messaging' },
   { id: 'slack', name: 'Slack', color: '#4A154B', letter: '#', placeholder: 'acme-corp.slack.com', desc: 'Internal team & client channels' },
   { id: 'email', name: 'Email', color: '#F59E0B', letter: '@', placeholder: 'user@company.com', desc: 'Work inbox & newsletters' },

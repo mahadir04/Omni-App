@@ -8,6 +8,7 @@ import Sidebar from '../layout/Sidebar';
 import { AddPlatformModal, PlatformRulesModal } from './PlatformModals';
 
 const PLATFORM_ICONS: Record<string, { color: string; letter: string }> = {
+  messenger: { color: '#0084FF', letter: 'M' },
   whatsapp: { color: '#25D366', letter: 'W' },
   slack: { color: '#4A154B', letter: '#' },
   email: { color: '#F59E0B', letter: '@' },
@@ -226,6 +227,7 @@ export default function PlatformsPage() {
                     value={simPlatform}
                     onChange={(e) => setSimPlatform(e.target.value)}
                   >
+                    <option value="messenger">Messenger</option>
                     <option value="whatsapp">WhatsApp</option>
                     <option value="slack">Slack</option>
                     <option value="email">Email</option>
