@@ -128,8 +128,8 @@ export default function PlatformsPage() {
               <div className="platform-grid">
                 {platforms.map((p) => {
                   const icon = PLATFORM_ICONS[p.platform];
-                  const profileName = p.metadata_?.profile_name || p.external_account_id || `${p.platform} Profile`;
-                  const accountHandle = p.external_account_id || p.metadata_?.account_id || 'Connected';
+                  const profileName = String(p.metadata_?.profile_name || p.external_account_id || `${p.platform} Profile`);
+                  const accountHandle = String(p.external_account_id || p.metadata_?.account_id || 'Connected');
                   return (
                     <div className="platform-card" key={p.id}>
                       <div className="platform-card-header">
