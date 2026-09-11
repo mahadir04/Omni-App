@@ -1,14 +1,21 @@
 """Platforms router — list, connect, disconnect, reconnect."""
 
 import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 
 from app.dependencies import CurrentUser, DbSession
+from app.models.ai_analysis import AIAnalysis
+from app.models.contact import Contact
+from app.models.conversation import Conversation
+from app.models.message import Message
 from app.models.platform_connection import PlatformConnection
 from app.schemas.platform import PlatformConnectionResponse, PlatformConnectRequest
 from app.services.audit_service import log_action
+from app.websocket import ws_manager
 
 router = APIRouter(prefix="/api/platforms", tags=["platforms"])
 
@@ -24,7 +31,6 @@ async def list_platforms(db: DbSession, current_user: CurrentUser):
         )
     )
     connections = result.scalars().all()
-    # Map metadata_ → metadata_ for response (alias)
     return [
         PlatformConnectionResponse(
             id=c.id,
@@ -36,15 +42,6 @@ async def list_platforms(db: DbSession, current_user: CurrentUser):
         )
         for c in connections
     ]
-
-
-from datetime import datetime, timezone
-from decimal import Decimal
-from app.models.ai_analysis import AIAnalysis
-from app.models.contact import Contact
-from app.models.conversation import Conversation
-from app.models.message import Message
-from app.websocket import ws_manager
 
 
 @router.post("/connect", response_model=PlatformConnectionResponse, status_code=201)
@@ -127,6 +124,7 @@ async def connect_platform(
             )
         )
         conv = conv_res.scalar_one_or_none()
+        now_dt = datetime.utcnow()
         if not conv:
             conv = Conversation(
                 user_id=current_user.id,
@@ -135,13 +133,13 @@ async def connect_platform(
                 status="open",
                 label="action",
                 unread_count=1,
-                last_message_at=datetime.now(timezone.utc),
+                last_message_at=now_dt,
             )
             db.add(conv)
             await db.flush()
         else:
             conv.unread_count = (conv.unread_count or 0) + 1
-            conv.last_message_at = datetime.now(timezone.utc)
+            conv.last_message_at = now_dt
             conv.status = "open"
 
         welcome_text = (

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Integer, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,9 +38,11 @@ class Conversation(Base):
         Text, nullable=False, default="inherit"
     )  # inherit | force_manual | force_auto
     unread_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    last_message_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     # ── Relationships ────────────────────────────────────────────────────
