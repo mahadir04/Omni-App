@@ -88,7 +88,17 @@ def create_app() -> FastAPI:
         except WebSocketDisconnect:
             ws_manager.disconnect(websocket, user_id)
 
-    # ── Health check ─────────────────────────────────────────────────────
+    # ── Root & Health check ──────────────────────────────────────────────
+    @app.get("/")
+    async def root():
+        return {
+            "status": "online",
+            "app": settings.app_name,
+            "version": "1.0.0",
+            "docs": "/docs",
+            "health": "/health",
+        }
+
     @app.get("/health")
     async def health():
         return {"status": "ok", "app": settings.app_name}
