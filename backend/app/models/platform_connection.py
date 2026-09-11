@@ -24,7 +24,7 @@ class PlatformConnection(Base):
     )
     platform: Mapped[str] = mapped_column(
         Text, nullable=False
-    )  # whatsapp | slack | email | linkedin | sms
+    )  # whatsapp | slack | email | linkedin | sms | messenger
     status: Mapped[str] = mapped_column(
         Text, nullable=False, default="connected"
     )  # connected | offline | reauth_required

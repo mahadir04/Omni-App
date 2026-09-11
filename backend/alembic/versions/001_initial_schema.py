@@ -55,7 +55,7 @@ def upgrade() -> None:
                   server_default=sa.text("now()")),
         sa.UniqueConstraint("user_id", "platform", "external_account_id"),
         sa.CheckConstraint(
-            "platform IN ('whatsapp','slack','email','linkedin','sms')",
+            "platform IN ('whatsapp','slack','email','linkedin','sms','messenger','telegram','instagram')",
             name="ck_platform_connections_platform",
         ),
         sa.CheckConstraint(
