@@ -22,27 +22,80 @@ from app.websocket import ws_manager
 logger = logging.getLogger(__name__)
 
 
+from app.models.platform_connection import PlatformConnection
+
+
 async def _dispatch_to_platform(
+    db: AsyncSession,
+    user_id: uuid.UUID,
     platform: str,
     recipient_handle: str,
     content: str,
 ) -> str:
     """Send message via platform API if credentials are provided."""
+    # Look up connection token if stored in database
+    conn_res = await db.execute(
+        select(PlatformConnection).where(
+            PlatformConnection.user_id == user_id,
+            PlatformConnection.platform == platform,
+        )
+    )
+    conn = conn_res.scalars().first()
+    access_token = conn.access_token_enc if conn else None
+
+    # ── Telegram ─────────────────────────────────────────────────────────
+    if platform == "telegram":
+        token = access_token or getattr(settings, "telegram_bot_token", None)
+        if token and token != "mock-token":
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={"chat_id": recipient_handle, "text": content},
+                    )
+                    if res.status_code == 200 and res.json().get("ok"):
+                        return "delivered_telegram"
+                    logger.warning(f"Telegram sendMessage failed: {res.text}")
+            except Exception as e:
+                logger.error(f"Error dispatching to Telegram: {e}")
+
+    # ── Messenger ────────────────────────────────────────────────────────
+    if platform == "messenger":
+        token = access_token or getattr(settings, "meta_page_access_token", None)
+        if token and token != "mock-token":
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.post(
+                        "https://graph.facebook.com/v19.0/me/messages",
+                        params={"access_token": token},
+                        json={
+                            "recipient": {"id": recipient_handle},
+                            "message": {"text": content},
+                        },
+                    )
+                    if res.status_code in (200, 201):
+                        return "delivered_messenger"
+                    logger.warning(f"Messenger dispatch failed: {res.text}")
+            except Exception as e:
+                logger.error(f"Error dispatching to Messenger: {e}")
+
     # ── Slack ────────────────────────────────────────────────────────────
-    if platform == "slack" and settings.slack_bot_token:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(
-                    "https://slack.com/api/chat.postMessage",
-                    headers={"Authorization": f"Bearer {settings.slack_bot_token}"},
-                    json={"channel": recipient_handle, "text": content},
-                )
-                data = res.json()
-                if data.get("ok"):
-                    return "delivered_slack"
-                logger.warning(f"Slack postMessage failed: {data.get('error')}")
-        except Exception as e:
-            logger.error(f"Error dispatching to Slack: {e}")
+    if platform == "slack":
+        token = access_token or settings.slack_bot_token
+        if token and token != "mock-token":
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.post(
+                        "https://slack.com/api/chat.postMessage",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"channel": recipient_handle, "text": content},
+                    )
+                    data = res.json()
+                    if data.get("ok"):
+                        return "delivered_slack"
+                    logger.warning(f"Slack postMessage failed: {data.get('error')}")
+            except Exception as e:
+                logger.error(f"Error dispatching to Slack: {e}")
 
     # ── Twilio (WhatsApp & SMS) ──────────────────────────────────────────
     if platform in ("whatsapp", "sms") and settings.twilio_account_sid and settings.twilio_auth_token:
@@ -106,7 +159,9 @@ async def send_reply(
             recipient_handle = contact.platform_handle
 
     # Dispatch to platform
-    delivery_status = await _dispatch_to_platform(platform, recipient_handle, content)
+    delivery_status = await _dispatch_to_platform(
+        db, user_id, platform, recipient_handle, content
+    )
 
     # Store outbound message
     outbound_msg = Message(

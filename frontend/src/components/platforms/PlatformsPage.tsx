@@ -8,8 +8,9 @@ import Sidebar from '../layout/Sidebar';
 import { AddPlatformModal, PlatformRulesModal } from './PlatformModals';
 
 const PLATFORM_ICONS: Record<string, { color: string; letter: string }> = {
-  messenger: { color: '#0084FF', letter: 'M' },
+  telegram: { color: '#229ED9', letter: 'TG' },
   whatsapp: { color: '#25D366', letter: 'W' },
+  messenger: { color: '#0084FF', letter: 'M' },
   slack: { color: '#4A154B', letter: '#' },
   email: { color: '#F59E0B', letter: '@' },
   linkedin: { color: '#0A66C2', letter: 'in' },
@@ -209,6 +210,41 @@ export default function PlatformsPage() {
             )}
           </div>
 
+          {/* Live Webhook Reference Card */}
+          <div className="settings-card" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+            <div className="settings-card-header">
+              <div className="settings-card-title">📡 Live Inbound Webhook Endpoints</div>
+              <div className="settings-card-desc">
+                Paste these public webhook URLs into your platform developer dashboards (Twilio, Meta, Slack) to receive real-time messages.
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, marginTop: 8 }}>
+              {[
+                { name: 'Telegram Bot', method: 'Automatic', path: '/api/webhooks/telegram', note: 'Configured automatically when pasting Bot Token' },
+                { name: 'WhatsApp (Twilio/Meta)', method: 'POST', path: '/api/webhooks/whatsapp', note: 'Paste in Twilio Sandbox or Meta Cloud API' },
+                { name: 'Facebook Messenger', method: 'POST', path: '/api/webhooks/messenger', note: 'Subscribe to messages in Meta App' },
+                { name: 'Slack Events', method: 'POST', path: '/api/webhooks/slack', note: 'Request URL in Event Subscriptions' },
+              ].map((wh) => (
+                <div key={wh.name} style={{
+                  padding: '10px 12px',
+                  background: 'var(--bg-primary)',
+                  borderRadius: 8,
+                  border: '1px solid var(--border-color)',
+                  fontSize: 12,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{wh.name}</span>
+                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-tertiary)', fontWeight: 600 }}>{wh.method}</span>
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#3B82F6', wordBreak: 'break-all' }}>
+                    https://omni-app-wt70.onrender.com{wh.path}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>{wh.note}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Test & Simulation Card */}
           <div className="settings-card">
             <div className="settings-card-header">
@@ -227,6 +263,7 @@ export default function PlatformsPage() {
                     value={simPlatform}
                     onChange={(e) => setSimPlatform(e.target.value)}
                   >
+                    <option value="telegram">Telegram</option>
                     <option value="messenger">Messenger</option>
                     <option value="whatsapp">WhatsApp</option>
                     <option value="slack">Slack</option>

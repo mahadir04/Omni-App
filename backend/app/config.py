@@ -27,10 +27,30 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o"
 
     # ── Platform Delivery & Webhooks ─────────────────────────────────────
-    slack_bot_token: str | None = None
+
+    # Slack
+    slack_bot_token: str | None = None  # xoxb-...
+
+    # Twilio (WhatsApp & SMS)
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
-    twilio_phone_number: str | None = None
+    twilio_phone_number: str | None = None  # E.164 e.g. +14155238886
+
+    # Messenger / Meta
+    messenger_page_token: str | None = None     # Page Access Token
+    messenger_app_secret: str | None = None     # App Secret
+    messenger_verify_token: str = "omni-verify-token"  # Match in Meta webhook config
+
+    # Email / SMTP (for sending replies)
+    smtp_host: str | None = None       # e.g. smtp.gmail.com
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None  # Defaults to smtp_user if not set
+    smtp_use_tls: bool = True
+
+    # SendGrid (alternative to SMTP for outbound email)
+    sendgrid_api_key: str | None = None
 
     # ── CORS ─────────────────────────────────────────────────────────────
     frontend_url: str = "http://localhost:5173"

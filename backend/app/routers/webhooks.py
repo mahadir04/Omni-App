@@ -81,6 +81,18 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
                 sender_handle = event.get("user", "slack_user")
                 sender_name = f"Slack User ({sender_handle})"
                 platform_msg_id = event.get("client_msg_id") or event.get("ts")
+            elif platform == "telegram":
+                # Telegram Bot webhook payload
+                tg_msg = body.get("message") or body.get("channel_post") or body.get("edited_message") or {}
+                content = tg_msg.get("text") or tg_msg.get("caption") or ""
+                tg_from = tg_msg.get("from", {})
+                tg_chat = tg_msg.get("chat", {})
+                sender_handle = str(tg_chat.get("id") or tg_from.get("id") or "telegram_user")
+                first_name = tg_from.get("first_name", "")
+                last_name = tg_from.get("last_name", "")
+                username = tg_from.get("username", "")
+                sender_name = f"{first_name} {last_name}".strip() or (f"@{username}" if username else f"Telegram User {sender_handle}")
+                platform_msg_id = str(tg_msg.get("message_id") or uuid.uuid4())
             elif platform == "messenger" and "entry" in body:
                 # Meta / Facebook Messenger webhook payload format
                 entries = body.get("entry", [])
@@ -92,6 +104,20 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
                             platform_msg_id = msg_obj.get("mid")
                             sender_handle = str(messaging.get("sender", {}).get("id", "messenger_user"))
                             sender_name = f"Messenger User ({sender_handle[-4:] if len(sender_handle) >= 4 else sender_handle})"
+                            break
+            elif platform == "whatsapp" and "entry" in body:
+                # Meta WhatsApp Cloud API webhook payload
+                entries = body.get("entry", [])
+                for entry in entries:
+                    for change in entry.get("changes", []):
+                        value = change.get("value", {})
+                        contacts_list = value.get("contacts", [])
+                        contact_profile = contacts_list[0].get("profile", {}).get("name") if contacts_list else None
+                        for msg_item in value.get("messages", []):
+                            content = msg_item.get("text", {}).get("body", "")
+                            sender_handle = str(msg_item.get("from", "whatsapp_user"))
+                            sender_name = contact_profile or f"WhatsApp ({sender_handle})"
+                            platform_msg_id = str(msg_item.get("id") or uuid.uuid4())
                             break
             else:
                 # Generic JSON / Postmark / SendGrid / Custom

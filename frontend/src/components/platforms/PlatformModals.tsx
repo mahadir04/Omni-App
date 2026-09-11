@@ -10,40 +10,52 @@ interface AddPlatformModalProps {
 }
 
 const AVAILABLE_PLATFORMS = [
-  { id: 'messenger', name: 'Messenger', color: '#0084FF', letter: 'M', placeholder: 'm.me/yourpage or Page ID', desc: 'Facebook & Meta Messenger' },
-  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', letter: 'W', placeholder: '+1 (555) 234-5678', desc: 'Direct client messaging' },
-  { id: 'slack', name: 'Slack', color: '#4A154B', letter: '#', placeholder: 'acme-corp.slack.com', desc: 'Internal team & client channels' },
+  { id: 'telegram', name: 'Telegram', color: '#229ED9', letter: 'TG', placeholder: 'e.g. 7123456789:AAHk...', desc: 'Connect free bot created with @BotFather', isToken: true },
+  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', letter: 'W', placeholder: '+1 (555) 234-5678', desc: 'Twilio Sandbox or Meta Cloud API' },
+  { id: 'messenger', name: 'Messenger', color: '#0084FF', letter: 'M', placeholder: 'Facebook Page ID or Page Name', desc: 'Facebook & Meta Messenger' },
+  { id: 'slack', name: 'Slack', color: '#4A154B', letter: '#', placeholder: 'acme-corp.slack.com', desc: 'Bot Token or Workspace' },
   { id: 'email', name: 'Email', color: '#F59E0B', letter: '@', placeholder: 'user@company.com', desc: 'Work inbox & newsletters' },
   { id: 'linkedin', name: 'LinkedIn', color: '#0A66C2', letter: 'in', placeholder: 'linkedin.com/in/profile', desc: 'InMail & network messages' },
-  { id: 'sms', name: 'SMS', color: '#6366F1', letter: 'SMS', placeholder: '+1 (555) 987-6543', desc: 'SMS text messaging' },
+  { id: 'sms', name: 'SMS', color: '#6366F1', letter: 'SMS', placeholder: '+1 (555) 987-6543', desc: 'Twilio SMS messaging' },
 ];
 
 export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModalProps) {
-  const [selectedPlatform, setSelectedPlatform] = useState('whatsapp');
+  const [selectedPlatform, setSelectedPlatform] = useState('telegram');
   const [profileName, setProfileName] = useState('');
   const [accountId, setAccountId] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const currentPlatformInfo = AVAILABLE_PLATFORMS.find((p) => p.id === selectedPlatform)!;
+  const webhookUrl = `https://omni-app-wt70.onrender.com/api/webhooks/${selectedPlatform}`;
+
+  const copyWebhook = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopiedWebhook(true);
+    setTimeout(() => setCopiedWebhook(false), 2500);
+  };
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
+      const token = apiToken.trim() || (selectedPlatform === 'telegram' ? accountId.trim() : 'mock-token');
       await connectPlatform({
         platform: selectedPlatform,
         profile_name: profileName.trim() || undefined,
         external_account_id: accountId.trim() || undefined,
-        access_token: 'mock-oauth-token',
+        access_token: token,
       });
       onSuccess();
       onClose();
       setProfileName('');
       setAccountId('');
+      setApiToken('');
     } catch (err: any) {
       console.error(err);
       const serverMsg = err?.response?.data?.detail || err?.message;
@@ -55,7 +67,7 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
         <div className="modal-header">
           <div className="modal-title">Connect Communication Platform</div>
           <button className="modal-close" onClick={onClose}><X size={18} /></button>
@@ -70,7 +82,10 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
                   type="button"
                   key={p.id}
                   className={`platform-select-btn ${selectedPlatform === p.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedPlatform(p.id)}
+                  onClick={() => {
+                    setSelectedPlatform(p.id);
+                    setError(null);
+                  }}
                 >
                   <span
                     style={{
@@ -80,7 +95,7 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
                       background: p.color,
                       color: 'white',
                       fontWeight: 700,
-                      fontSize: 11,
+                      fontSize: 10,
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -93,21 +108,101 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
               ))}
             </div>
 
-            <div className="form-group" style={{ marginTop: 12 }}>
+            {/* Platform Setup Helper / Guide */}
+            {selectedPlatform === 'telegram' && (
+              <div style={{
+                background: 'rgba(34, 158, 217, 0.08)',
+                border: '1px solid rgba(34, 158, 217, 0.25)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, color: '#229ED9', marginBottom: 4 }}>
+                  ⚡ Free Instant Setup via Telegram Bot
+                </div>
+                1. Open Telegram &amp; message <b>@BotFather</b><br />
+                2. Send <code>/newbot</code> and follow prompts to get your Bot Token<br />
+                3. Paste the Bot Token below — Omni will automatically register the live webhook!
+              </div>
+            )}
+
+            {selectedPlatform === 'whatsapp' && (
+              <div style={{
+                background: 'rgba(37, 211, 102, 0.08)',
+                border: '1px solid rgba(37, 211, 102, 0.25)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, color: '#25D366', marginBottom: 4 }}>
+                  🔗 Webhook URL for Twilio / Meta Cloud API
+                </div>
+                Paste this Webhook URL in your Twilio WhatsApp Sandbox or Meta App settings:
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <input
+                    type="text"
+                    readOnly
+                    className="form-input"
+                    style={{ fontSize: 11, fontFamily: 'monospace', padding: '6px 8px' }}
+                    value={webhookUrl}
+                  />
+                  <button type="button" className="btn-secondary" onClick={copyWebhook} style={{ whiteSpace: 'nowrap', fontSize: 11, padding: '6px 12px' }}>
+                    {copiedWebhook ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {selectedPlatform === 'messenger' && (
+              <div style={{
+                background: 'rgba(0, 132, 255, 0.08)',
+                border: '1px solid rgba(0, 132, 255, 0.25)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, color: '#0084FF', marginBottom: 4 }}>
+                  🔗 Meta Messenger Webhook URL
+                </div>
+                In Meta Developer Dashboard &gt; Messenger &gt; Webhooks, subscribe to <code>messages</code>:
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <input
+                    type="text"
+                    readOnly
+                    className="form-input"
+                    style={{ fontSize: 11, fontFamily: 'monospace', padding: '6px 8px' }}
+                    value={webhookUrl}
+                  />
+                  <button type="button" className="btn-secondary" onClick={copyWebhook} style={{ whiteSpace: 'nowrap', fontSize: 11, padding: '6px 12px' }}>
+                    {copiedWebhook ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="form-group">
               <label className="form-label">Profile / Display Name</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. Acme Support or John Doe"
+                placeholder={selectedPlatform === 'telegram' ? 'e.g. My Telegram Bot' : 'e.g. Support Inbox or Personal'}
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
               />
             </div>
 
-            <div className="form-group" style={{ marginTop: 8 }}>
-              <label className="form-label">Account Identifier / Handle / Email</label>
+            <div className="form-group">
+              <label className="form-label">
+                {selectedPlatform === 'telegram' ? 'Telegram Bot Token' : 'Account Identifier / Number / Page'}
+              </label>
               <input
-                type="text"
+                type={selectedPlatform === 'telegram' ? 'password' : 'text'}
                 className="form-input"
                 required
                 placeholder={currentPlatformInfo.placeholder}
@@ -118,6 +213,19 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
                 {currentPlatformInfo.desc}
               </div>
             </div>
+
+            {selectedPlatform !== 'telegram' && (
+              <div className="form-group">
+                <label className="form-label">API Access Token / Secret (Optional)</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="Paste OAuth token, Bot token, or API Key (optional)"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                />
+              </div>
+            )}
 
             {error && <div className="error-text">{error}</div>}
           </div>

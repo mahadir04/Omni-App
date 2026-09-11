@@ -17,9 +17,15 @@ from app.schemas.platform import PlatformConnectionResponse, PlatformConnectRequ
 from app.services.audit_service import log_action
 from app.websocket import ws_manager
 
+import logging
+import httpx
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/platforms", tags=["platforms"])
 
-VALID_PLATFORMS = {"whatsapp", "slack", "email", "linkedin", "sms", "messenger"}
+VALID_PLATFORMS = {"whatsapp", "slack", "email", "linkedin", "sms", "messenger", "telegram"}
 
 
 @router.get("", response_model=list[PlatformConnectionResponse])
@@ -64,6 +70,27 @@ async def connect_platform(
         "connected_at": datetime.now(timezone.utc).isoformat(),
         "status": "active",
     })
+
+    # ── Auto-register Telegram Webhook if token provided ─────────────────
+    if body.platform == "telegram" and body.access_token and body.access_token != "mock-token":
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                webhook_url = "https://omni-app-wt70.onrender.com/api/webhooks/telegram"
+                wh_res = await client.post(
+                    f"https://api.telegram.org/bot{body.access_token}/setWebhook",
+                    json={"url": webhook_url}
+                )
+                bot_info = await client.get(f"https://api.telegram.org/bot{body.access_token}/getMe")
+                if bot_info.status_code == 200:
+                    b_data = bot_info.json().get("result", {})
+                    profile_name = b_data.get("first_name", profile_name)
+                    account_handle = f"@{b_data.get('username', account_handle)}"
+                    meta["profile_name"] = profile_name
+                    meta["account_id"] = account_handle
+                    meta["bot_username"] = b_data.get("username")
+                    logger.info(f"Telegram bot connected: {profile_name} ({account_handle})")
+        except Exception as ex:
+            logger.warning(f"Could not auto-register Telegram webhook: {ex}")
 
     try:
         # Check for existing connection by platform & user
