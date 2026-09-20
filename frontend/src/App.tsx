@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import LoginPage from './components/auth/LoginPage';
 import SignupPage from './components/auth/SignupPage';
+import LandingPage from './components/landing/LandingPage';
 import InboxPage from './components/inbox/InboxPage';
 import AutomationPage from './components/automation/AutomationPage';
 import PlatformsPage from './components/platforms/PlatformsPage';
@@ -38,6 +39,9 @@ export default function App() {
     <BrowserRouter>
       <NotificationManager />
       <Routes>
+        {/* Public Landing Page */}
+        <Route path="/" element={<LandingPage />} />
+
         {/* Auth */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
