@@ -242,15 +242,15 @@ fun MainScreen(
                                 authError = null
 
                                 scope.launch {
-                                    val token = if (isSignUpMode) {
+                                    val authResult = if (isSignUpMode) {
                                         app.apiClient.signup(serverUrl.trimEnd('/'), fullName.ifBlank { "User" }, email.trim(), password)
                                     } else {
                                         app.apiClient.login(serverUrl.trimEnd('/'), email.trim(), password)
                                     }
 
-                                    if (token != null) {
+                                    if (authResult.token != null) {
                                         val deviceName = "${Build.MANUFACTURER} ${Build.MODEL} Bridge"
-                                        val reg = app.apiClient.registerDevice(serverUrl.trimEnd('/'), token, deviceName)
+                                        val reg = app.apiClient.registerDevice(serverUrl.trimEnd('/'), authResult.token, deviceName)
                                         if (reg != null) {
                                             session.saveSession(
                                                 serverUrl = serverUrl.trimEnd('/'),
@@ -266,7 +266,7 @@ fun MainScreen(
                                             authError = "Authenticated, but failed to register device. Check server."
                                         }
                                     } else {
-                                        authError = if (isSignUpMode) "Signup failed. Email may already be in use." else "Invalid email or password."
+                                        authError = authResult.errorMessage ?: if (isSignUpMode) "Signup failed." else "Login failed."
                                     }
                                     isLoading = false
                                 }

@@ -30,11 +30,16 @@ class OmniApiClient(private val session: DeviceSessionStore) {
 
     // ── Authentication (Login & Signup directly from phone) ───────────────
 
+    data class AuthResult(
+        val token: String? = null,
+        val errorMessage: String? = null,
+    )
+
     suspend fun login(
         serverUrl: String,
         email: String,
         password: String,
-    ): String? = withContext(Dispatchers.IO) {
+    ): AuthResult = withContext(Dispatchers.IO) {
         val body = mapOf("email" to email, "password" to password)
         val request = Request.Builder()
             .url("$serverUrl/api/auth/login")
@@ -43,17 +48,24 @@ class OmniApiClient(private val session: DeviceSessionStore) {
 
         runCatching {
             http.newCall(request).execute().use { response ->
+                val raw = response.body?.string() ?: ""
                 if (response.isSuccessful) {
-                    val map = gson.fromJson(response.body?.string(), Map::class.java)
-                    map["access_token"] as? String
+                    val map = gson.fromJson(raw, Map::class.java)
+                    val token = map["access_token"] as? String
+                    if (token != null) AuthResult(token = token)
+                    else AuthResult(errorMessage = "Server returned empty token.")
                 } else {
-                    Log.e(TAG, "Login failed: ${response.code}")
-                    null
+                    Log.e(TAG, "Login failed: ${response.code} $raw")
+                    val detail = try {
+                        val map = gson.fromJson(raw, Map::class.java)
+                        map["detail"] as? String
+                    } catch (_: Exception) { null }
+                    AuthResult(errorMessage = detail ?: "Invalid credentials (HTTP ${response.code})")
                 }
             }
         }.getOrElse { e ->
             Log.e(TAG, "Login network error: $e")
-            null
+            AuthResult(errorMessage = "Cannot reach server: ${e.localizedMessage ?: e.message}")
         }
     }
 
@@ -62,7 +74,7 @@ class OmniApiClient(private val session: DeviceSessionStore) {
         fullName: String,
         email: String,
         password: String,
-    ): String? = withContext(Dispatchers.IO) {
+    ): AuthResult = withContext(Dispatchers.IO) {
         val body = mapOf("full_name" to fullName, "email" to email, "password" to password)
         val request = Request.Builder()
             .url("$serverUrl/api/auth/signup")
@@ -71,17 +83,22 @@ class OmniApiClient(private val session: DeviceSessionStore) {
 
         runCatching {
             http.newCall(request).execute().use { response ->
+                val raw = response.body?.string() ?: ""
                 if (response.isSuccessful) {
                     // Auto login after signup
                     login(serverUrl, email, password)
                 } else {
-                    Log.e(TAG, "Signup failed: ${response.code}")
-                    null
+                    Log.e(TAG, "Signup failed: ${response.code} $raw")
+                    val detail = try {
+                        val map = gson.fromJson(raw, Map::class.java)
+                        map["detail"] as? String
+                    } catch (_: Exception) { null }
+                    AuthResult(errorMessage = detail ?: "Signup error (HTTP ${response.code})")
                 }
             }
         }.getOrElse { e ->
             Log.e(TAG, "Signup network error: $e")
-            null
+            AuthResult(errorMessage = "Cannot reach server: ${e.localizedMessage ?: e.message}")
         }
     }
 
