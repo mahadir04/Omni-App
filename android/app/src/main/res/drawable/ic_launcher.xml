@@ -1,15 +1,116 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 1. Deep Cyber Obsidian Background -->
     <path
-        android:fillColor="#0D1117"
-        android:pathData="M0,0h108v108h-108z" />
+        android:pathData="M16,0 L92,0 A16,16 0 0 1 108,16 L108,92 A16,16 0 0 1 92,108 L16,108 A16,16 0 0 1 0,92 L0,16 A16,16 0 0 1 16,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#07090E" />
+                <item android:offset="0.5" android:color="#0F141F" />
+                <item android:offset="1.0" android:color="#161C2A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 2. Subtle Outer Accent Ring with Crimson Neon Glow -->
     <path
-        android:fillColor="#238636"
-        android:pathData="M54,28 A26,26 0 1,0 80,54 A26,26 0 0,0 54,28 Z" />
+        android:pathData="M54,18 A36,36 0 1 0 54,90 A36,36 0 1 0 54,18 Z"
+        android:strokeWidth="2.5">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="18"
+                android:startY="18"
+                android:endX="90"
+                android:endY="90"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#DC2626" />
+                <item android:offset="0.5" android:color="#EF4444" />
+                <item android:offset="1.0" android:color="#7F1D1D" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. Ambient Crimson Radial Glow Behind Glyph -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M46,42 L66,54 L46,66 Z" />
+        android:pathData="M54,32 A22,22 0 1 0 54,76 A22,22 0 1 0 54,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="24"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#4DDC2626" />
+                <item android:offset="1.0" android:color="#00000000" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. Signature Omni Omega Glyph ("Ω") -->
+    <!-- Shadow Path -->
+    <path
+        android:pathData="M30,73 L43,73 C40,65 37,57 37,49 C37,39.6 44.6,32 54,32 C63.4,32 71,39.6 71,49 C71,57 68,65 65,73 L78,73"
+        android:strokeColor="#1A0000"
+        android:strokeWidth="8.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Main Metallic White/Platinum Omega Stroke -->
+    <path
+        android:pathData="M30,71 L43,71 C40,63 37,55 37,47 C37,37.6 44.6,30 54,30 C63.4,30 71,37.6 71,47 C71,55 68,63 65,71 L78,71"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="30"
+                android:startY="30"
+                android:endX="78"
+                android:endY="71"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFFFFF" />
+                <item android:offset="0.6" android:color="#F1F5F9" />
+                <item android:offset="1.0" android:color="#E2E8F0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Core Dot: AI Intelligence Beacon -->
+    <path
+        android:pathData="M54,49 A4,4 0 1 0 54,57 A4,4 0 1 0 54,49 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="50"
+                android:startY="49"
+                android:endX="58"
+                android:endY="57"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#EF4444" />
+                <item android:offset="1.0" android:color="#B91C1C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4 Cardinal Multi-Platform Node Dots -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M54,15 A3,3 0 1 0 54,21 A3,3 0 1 0 54,15 Z" />
+    <path
+        android:fillColor="#0084FF"
+        android:pathData="M87,51 A3,3 0 1 0 87,57 A3,3 0 1 0 87,51 Z" />
+    <path
+        android:fillColor="#E1306C"
+        android:pathData="M54,87 A3,3 0 1 0 54,93 A3,3 0 1 0 54,87 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M15,51 A3,3 0 1 0 15,57 A3,3 0 1 0 15,51 Z" />
 </vector>

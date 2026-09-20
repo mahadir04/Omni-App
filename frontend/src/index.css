@@ -1739,7 +1739,9 @@ html {
 .landing-gradient-text {
   background: linear-gradient(135deg, #F43F5E 0%, #EF4444 50%, #F59E0B 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 .landing-hero-desc {
@@ -1952,9 +1954,48 @@ html {
     width: 100% !important;
   }
 
-  .inbox-layout {
-    flex-direction: column !important;
-    height: calc(100vh - 54px) !important;
+  /* Responsive Inbox for Phone Screen */
+  .inbox-panel {
+    width: 100% !important;
+    flex: 1 !important;
+    height: 100% !important;
+    border-right: none !important;
+  }
+
+  /* When a conversation is selected on mobile, hide the list and show chat detail full screen */
+  .inbox-panel.has-selection {
+    display: none !important;
+  }
+
+  .conversation-detail {
+    width: 100% !important;
+    flex: 1 !important;
+    height: 100% !important;
+  }
+
+  .empty-state-desktop {
+    display: none !important;
+  }
+
+  .detail-header {
+    padding: 10px 12px !important;
+  }
+
+  .detail-header-left {
+    gap: 8px !important;
+  }
+
+  /* Mobile touch targets */
+  .detail-header .icon-btn,
+  .quick-reply-pill,
+  .sidebar-btn,
+  .filter-tab,
+  .platform-chip {
+    min-height: 38px;
+  }
+
+  .message-input-bar {
+    padding: 10px 12px !important;
   }
 
   .settings-page {
@@ -1968,9 +2009,15 @@ html {
     padding: 0 !important;
   }
 
+  .settings-card {
+    padding: 14px !important;
+  }
+
   .modal-dialog {
     max-width: 95vw !important;
     margin: 10px !important;
+    padding: 16px !important;
   }
 }
+
 
