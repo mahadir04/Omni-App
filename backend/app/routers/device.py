@@ -198,11 +198,25 @@ async def reply_ack(body: DeviceReplyAck, db: DbSession):
 
 
 @router.get("/pairing-info")
-async def get_pairing_info(request: Request, current_user: CurrentUser):
+async def get_pairing_info(
+    request: Request,
+    current_user: CurrentUser,
+    server_host: str | None = None,
+):
     """Generate pairing URL, token, and deep link for Android app registration."""
     from app.services.auth_service import create_access_token
     token = create_access_token(str(current_user.id))
-    server_url = str(request.base_url).rstrip("/")
+    
+    # Use specified server_host or fallback to request base url
+    if server_host and server_host.strip():
+        server_url = server_host.strip().rstrip("/")
+    else:
+        server_url = str(request.base_url).rstrip("/")
+        # If running on localhost inside docker/desktop, default to port 8000
+        if "localhost" in server_url or "127.0.0.1" in server_url:
+            # Android phones on the same Wi-Fi need LAN IP or host IP
+            server_url = "http://192.168.0.100:8000"
+
     deep_link = f"omni://pair?server={server_url}&token={token}"
     return {
         "server_url": server_url,

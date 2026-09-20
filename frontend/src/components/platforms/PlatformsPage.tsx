@@ -35,6 +35,11 @@ export default function PlatformsPage() {
   const [simulating, setSimulating] = useState(false);
   const [simSuccess, setSimSuccess] = useState(false);
 
+  const [customServerUrl, setCustomServerUrl] = useState('');
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [pairingLoading, setPairingLoading] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
+
   const load = () => {
     setLoading(true);
     Promise.all([
@@ -52,13 +57,24 @@ export default function PlatformsPage() {
     load();
   }, []);
 
-  const handlePairClick = async () => {
+  const handlePairClick = async (overrideHost?: string) => {
+    setPairError(null);
+    setPairingLoading(true);
     try {
-      const info = await getPairingInfo();
+      const host = overrideHost !== undefined ? overrideHost : customServerUrl;
+      const info = await getPairingInfo(host || undefined);
       setPairingInfo(info);
+      if (!customServerUrl) {
+        setCustomServerUrl(info.server_url);
+      }
       setShowPairingModal(true);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to get pairing info', e);
+      const msg = e?.response?.data?.detail || 'Failed to load pairing info. Please ensure you are logged in.';
+      setPairError(msg);
+      alert(msg);
+    } finally {
+      setPairingLoading(false);
     }
   };
 
@@ -255,10 +271,29 @@ export default function PlatformsPage() {
                   Connect your Android phone to intercept WhatsApp, Messenger, and Instagram notifications locally. Messages flow directly into your Omni inbox, and replies are auto-routed through your phone.
                 </div>
               </div>
-              <button className="btn-primary" onClick={handlePairClick} style={{ whiteSpace: 'nowrap' }}>
-                <SmartphoneCharging size={16} /> Pair Android Phone
+              <button
+                className="btn-primary"
+                onClick={() => handlePairClick()}
+                disabled={pairingLoading}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                <SmartphoneCharging size={16} /> {pairingLoading ? 'Connecting...' : 'Pair Android Phone'}
               </button>
             </div>
+
+            {pairError && (
+              <div style={{
+                marginTop: 10,
+                padding: '8px 12px',
+                background: 'rgba(218, 54, 51, 0.15)',
+                border: '1px solid rgba(218, 54, 51, 0.4)',
+                borderRadius: 6,
+                color: '#f85149',
+                fontSize: 12,
+              }}>
+                {pairError}
+              </div>
+            )}
 
             {/* Devices List */}
             <div style={{ marginTop: 14 }}>
@@ -445,94 +480,153 @@ export default function PlatformsPage() {
       />
 
       {/* Phone Pairing Modal */}
-      {showPairingModal && pairingInfo && (
-        <div className="modal-backdrop" onClick={() => setShowPairingModal(false)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
-            <div className="modal-header">
-              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Smartphone size={20} color="#3FB950" />
-                <span>Pair Android Companion App</span>
-              </div>
-              <button className="modal-close" onClick={() => setShowPairingModal(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-                Open the <b>Omni Bridge</b> app on your Android phone and use the deep link or enter your credentials below.
-              </p>
+      {showPairingModal && pairingInfo && (() => {
+        const effectiveServer = (customServerUrl || pairingInfo.server_url || 'http://192.168.0.100:8000').trim().replace(/\/+$/, '');
+        const effectiveDeepLink = `omni://pair?server=${encodeURIComponent(effectiveServer)}&token=${encodeURIComponent(pairingInfo.token)}`;
+        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(effectiveDeepLink)}`;
 
-              <div style={{ marginBottom: 16 }}>
-                <label className="form-label">One-Click Deep Link (Tap on Android phone or browser):</label>
-                <div style={{ display: 'flex', gap: 8 }}>
+        return (
+          <div className="modal-backdrop" onClick={() => setShowPairingModal(false)}>
+            <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+              <div className="modal-header">
+                <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Smartphone size={20} color="#3FB950" />
+                  <span>Pair Android Companion App</span>
+                </div>
+                <button className="modal-close" onClick={() => setShowPairingModal(false)}>✕</button>
+              </div>
+              <div className="modal-body">
+                {/* Method 1: Direct In-App Login banner */}
+                <div style={{
+                  background: 'rgba(56, 139, 253, 0.1)',
+                  border: '1px solid rgba(56, 139, 253, 0.3)',
+                  borderRadius: 8,
+                  padding: '12px 14px',
+                  marginBottom: 16,
+                  fontSize: 13,
+                  lineHeight: 1.4,
+                }}>
+                  <div style={{ fontWeight: 600, color: '#58a6ff', marginBottom: 4 }}>
+                    ⚡ Fastest Method: Sign In Directly On Your Phone
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)' }}>
+                    Open the <b>Omni Bridge</b> app installed on your phone, type your email and password (or Sign Up), and tap <b>"Sign In & Link Phone"</b>. No QR scan or manual tokens required!
+                  </div>
+                </div>
+
+                {/* Method 2: QR Code Scan */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  background: 'var(--bg-primary)',
+                  padding: '16px',
+                  borderRadius: 10,
+                  border: '1px solid var(--border-color)',
+                  marginBottom: 16,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-primary)' }}>
+                    Scan QR Code with Phone Camera or Omni App
+                  </div>
+                  <div style={{
+                    background: '#ffffff',
+                    padding: 8,
+                    borderRadius: 8,
+                    display: 'inline-block',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    <img
+                      src={qrCodeUrl}
+                      alt="Pairing QR Code"
+                      width={180}
+                      height={180}
+                      style={{ display: 'block', borderRadius: 4 }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8 }}>
+                    Point your camera or tap "Scan QR" in the phone bridge app
+                  </div>
+                </div>
+
+                {/* Server URL Input */}
+                <div style={{ marginBottom: 12 }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Phone-Accessible Server URL:</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>(LAN IP or domain)</span>
+                  </label>
                   <input
                     type="text"
-                    readOnly
                     className="form-input"
-                    value={pairingInfo.deep_link}
+                    value={customServerUrl}
+                    onChange={(e) => setCustomServerUrl(e.target.value)}
+                    placeholder="http://192.168.0.100:8000"
                     style={{ fontFamily: 'monospace', fontSize: 12 }}
                   />
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      navigator.clipboard.writeText(pairingInfo.deep_link);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2500);
-                    }}
-                    style={{ whiteSpace: 'nowrap' }}
-                  >
-                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedLink ? 'Copied' : 'Copy'}
-                  </button>
+                </div>
+
+                {/* One-click Deep link */}
+                <div style={{ marginBottom: 12 }}>
+                  <label className="form-label">One-Click Deep Link:</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      readOnly
+                      className="form-input"
+                      value={effectiveDeepLink}
+                      style={{ fontFamily: 'monospace', fontSize: 11 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        navigator.clipboard.writeText(effectiveDeepLink);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2500);
+                      }}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                      {copiedLink ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Auth Token */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Auth Token:</label>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ padding: '2px 8px', fontSize: 11 }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(pairingInfo.token);
+                        setCopiedToken(true);
+                        setTimeout(() => setCopiedToken(false), 2500);
+                      }}
+                    >
+                      {copiedToken ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedToken ? 'Copied' : 'Copy Token'}
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    className="form-input"
+                    rows={2}
+                    value={pairingInfo.token}
+                    style={{ fontFamily: 'monospace', fontSize: 11, resize: 'none' }}
+                  />
                 </div>
               </div>
-
-              <div style={{ marginBottom: 12 }}>
-                <label className="form-label">Server URL:</label>
-                <input
-                  type="text"
-                  readOnly
-                  className="form-input"
-                  value={pairingInfo.server_url}
-                  style={{ fontFamily: 'monospace', fontSize: 12 }}
-                />
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={() => setShowPairingModal(false)}>
+                  Close
+                </button>
               </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <label className="form-label">Auth Token:</label>
-                <textarea
-                  readOnly
-                  className="form-input"
-                  rows={3}
-                  value={pairingInfo.token}
-                  style={{ fontFamily: 'monospace', fontSize: 11, resize: 'none' }}
-                />
-              </div>
-
-              <div style={{
-                background: 'rgba(56, 139, 253, 0.08)',
-                border: '1px solid rgba(56, 139, 253, 0.25)',
-                borderRadius: 8,
-                padding: '10px 14px',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-              }}>
-                <b>Next steps on your phone:</b>
-                <ol style={{ paddingLeft: 18, marginTop: 6, marginBottom: 0 }}>
-                  <li>Open Omni Bridge app</li>
-                  <li>Grant <i>Notification Access</i> in Android Settings</li>
-                  <li>Paste the deep link or Server URL + Token</li>
-                  <li>Tap <b>Pair Device</b> — your phone is now live!</li>
-                </ol>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowPairingModal(false)}>
-                Close
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

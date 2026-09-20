@@ -76,8 +76,10 @@ export const updateContact = (id: string, data: { is_vip?: boolean; display_name
 export const listDevices = () =>
   api.get<import('../types').DeviceConnection[]>('/device/status').then((r) => r.data);
 
-export const getPairingInfo = () =>
-  api.get<import('../types').PairingInfo>('/device/pairing-info').then((r) => r.data);
+export const getPairingInfo = (serverHost?: string) =>
+  api.get<import('../types').PairingInfo>('/device/pairing-info', {
+    params: serverHost ? { server_host: serverHost } : undefined,
+  }).then((r) => r.data);
 
 export const deleteDevice = (deviceId: string) =>
   api.delete(`/device/${deviceId}`);
