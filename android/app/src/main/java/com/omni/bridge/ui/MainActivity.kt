@@ -1,7 +1,9 @@
 package com.omni.bridge.ui
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -47,8 +49,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.omni.bridge.OmniBridgeApp
+import com.omni.bridge.data.OmniApiClient
 import com.omni.bridge.service.OmniConnectionService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Checks whether this app has been granted Notification Listener permission by the user.
+ */
+fun isNotificationListenerEnabled(context: Context): Boolean {
+    val pkgName = context.packageName
+    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    return !flat.isNullOrBlank() && flat.contains(pkgName)
+}
+
+/**
+ * Opens system application details settings (needed on Xiaomi/MIUI to unlock "Restricted Settings" & Autostart).
+ */
+fun openAppDetailsSettings(context: Context) {
+    runCatching {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    }.onFailure {
+        Toast.makeText(context, "Could not open settings", Toast.LENGTH_SHORT).show()
+    }
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -95,7 +124,8 @@ fun OmniAppMaster(
         OmniMobileHub(
             app = app,
             onGrantNotificationAccess = onGrantNotificationAccess,
-            onDisconnect = { isPaired = false }
+            onDisconnect = { isPaired = false },
+            onOpenPairingScreen = onOpenPairingScreen
         )
     }
 }
@@ -106,6 +136,7 @@ enum class HubTab(val title: String, val path: String, val iconText: String) {
     INBOX("Inbox", "/inbox", "💬"),
     AUTOMATION("Automation", "/automation", "⚡"),
     PLATFORMS("Platforms", "/platforms", "📱"),
+    DEVICE_BRIDGE("Bridge", "bridge_native", "📲"),
     SHOWCASE_3D("3D Hub", "/", "✨"),
 }
 
@@ -114,18 +145,21 @@ fun OmniMobileHub(
     app: OmniBridgeApp,
     onGrantNotificationAccess: () -> Unit,
     onDisconnect: () -> Unit,
+    onOpenPairingScreen: () -> Unit,
 ) {
     val context = LocalContext.current
     val session = app.sessionStore
     var selectedTab by remember { mutableStateOf(HubTab.INBOX) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var showBridgeModal by remember { mutableStateOf(false) }
     var isPageLoading by remember { mutableStateOf(false) }
+
+    // Re-check notification permission dynamically
+    var hasNotificationAccess by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
 
     val rawServerUrl = session.serverUrl ?: "http://192.168.0.100:8000"
     val jwtToken = session.jwtToken ?: ""
 
-    // Calculate web dashboard URL (frontend typically on :5173 if backend is on :8000)
+    // Calculate web dashboard URL (frontend on :5173 if backend is on :8000)
     val webBaseUrl = remember(rawServerUrl) {
         val clean = rawServerUrl.trimEnd('/')
         if (clean.endsWith(":8000")) {
@@ -136,7 +170,7 @@ fun OmniMobileHub(
     }
 
     // Handle Android system back press inside WebView
-    BackHandler(enabled = webViewInstance?.canGoBack() == true) {
+    BackHandler(enabled = webViewInstance?.canGoBack() == true && selectedTab != HubTab.DEVICE_BRIDGE) {
         webViewInstance?.goBack()
     }
 
@@ -187,17 +221,24 @@ fun OmniMobileHub(
                     }
                 }
 
-                // Status & Management Pill
+                // Status & Management Pill (Clickable directly opens Device Bridge)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val isGranted = isNotificationListenerEnabled(context)
+                    hasNotificationAccess = isGranted
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFF161B22))
-                            .border(1.dp, Color(0xFF30363D), RoundedCornerShape(20.dp))
-                            .clickable { showBridgeModal = true }
+                            .background(if (isGranted) Color(0xFF161B22) else Color(0xFF3B1812))
+                            .border(
+                                1.dp,
+                                if (isGranted) Color(0xFF30363D) else Color(0xFFF85149),
+                                RoundedCornerShape(20.dp)
+                            )
+                            .clickable { selectedTab = HubTab.DEVICE_BRIDGE }
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Row(
@@ -207,28 +248,38 @@ fun OmniMobileHub(
                             Box(
                                 modifier = Modifier
                                     .size(7.dp)
-                                    .background(Color(0xFF22C55E), CircleShape)
+                                    .background(
+                                        if (isGranted) Color(0xFF22C55E) else Color(0xFFF85149),
+                                        CircleShape
+                                    )
                             )
-                            Text("Bridge Active", color = Color(0xFFE6EDF3), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (isGranted) "Bridge Connected" else "Access Missing",
+                                color = if (isGranted) Color(0xFFE6EDF3) else Color(0xFFFF7B72),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
 
-                    // Reload page button
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF161B22))
-                            .clickable { webViewInstance?.reload() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("↻", color = Color(0xFF8B949E), fontSize = 14.sp)
+                    // Reload page button (only when viewing web view)
+                    if (selectedTab != HubTab.DEVICE_BRIDGE) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF161B22))
+                                .clickable { webViewInstance?.reload() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("↻", color = Color(0xFF8B949E), fontSize = 14.sp)
+                        }
                     }
                 }
             }
 
             // Loading bar
-            if (isPageLoading) {
+            if (isPageLoading && selectedTab != HubTab.DEVICE_BRIDGE) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(2.dp),
                     color = Color(0xFFDC2626),
@@ -236,193 +287,481 @@ fun OmniMobileHub(
                 )
             }
 
-            // ── Hardware Accelerated WebView Container ───────────────────────
+            // ── Main Content Area: Native Bridge Screen OR Hardware Accelerated WebView ──
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                AndroidView(
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                            settings.apply {
-                                javaScriptEnabled = true
-                                domStorageEnabled = true
-                                databaseEnabled = true
-                                useWideViewPort = true
-                                loadWithOverviewMode = true
-                                allowFileAccess = true
-                                allowContentAccess = true
-                                cacheMode = WebSettings.LOAD_DEFAULT
-                            }
-
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                    isPageLoading = true
-                                    super.onPageStarted(view, url, favicon)
+                if (selectedTab == HubTab.DEVICE_BRIDGE) {
+                    // Dedicated Native Phone Connection & Diagnostics Screen
+                    DeviceBridgeScreen(
+                        app = app,
+                        onGrantNotificationAccess = onGrantNotificationAccess,
+                        onDisconnect = onDisconnect,
+                        onOpenPairingScreen = onOpenPairingScreen,
+                        onNavigateToInbox = { selectedTab = HubTab.INBOX }
+                    )
+                } else {
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                layoutParams = ViewGroup.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                )
+                                setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    databaseEnabled = true
+                                    useWideViewPort = true
+                                    loadWithOverviewMode = true
+                                    allowFileAccess = true
+                                    allowContentAccess = true
+                                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                    cacheMode = WebSettings.LOAD_DEFAULT
                                 }
 
-                                override fun onPageFinished(view: WebView?, url: String?) {
-                                    isPageLoading = false
-                                    // Inject auth token and mobile styling class
-                                    view?.evaluateJavascript(
-                                        """
-                                        (function() {
-                                            try {
-                                                if ('$jwtToken' && '$jwtToken'.length > 5) {
-                                                    localStorage.setItem('omni_token', '$jwtToken');
-                                                }
-                                                document.body.classList.add('in-android-app');
-                                            } catch(e) {}
-                                        })();
-                                        """.trimIndent(),
-                                        null
-                                    )
-                                    super.onPageFinished(view, url)
-                                }
-                            }
+                                webViewClient = object : WebViewClient() {
+                                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                        isPageLoading = true
+                                    }
 
-                            val initialUrl = "$webBaseUrl${selectedTab.path}"
-                            loadUrl(initialUrl)
-                            webViewInstance = this
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                                    override fun onPageFinished(view: WebView?, url: String?) {
+                                        isPageLoading = false
+                                        // Auto-inject JWT token for seamless Single Sign-On
+                                        if (jwtToken.isNotBlank()) {
+                                            view?.evaluateJavascript(
+                                                """
+                                                (function() {
+                                                    try {
+                                                        if (!localStorage.getItem('omni_token')) {
+                                                            localStorage.setItem('omni_token', '$jwtToken');
+                                                            console.log('Omni token injected successfully');
+                                                        }
+                                                    } catch(e) { console.error(e); }
+                                                })();
+                                                """.trimIndent(),
+                                                null
+                                            )
+                                        }
+                                    }
+                                }
+
+                                webViewInstance = this
+                                loadUrl("$webBaseUrl${selectedTab.path}")
+                            }
+                        },
+                        update = { webView ->
+                            val targetUrl = "$webBaseUrl${selectedTab.path}"
+                            if (webView.url != targetUrl) {
+                                webView.loadUrl(targetUrl)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
-            // ── 3D Floating Bottom Navigation Bar ────────────────────────────
+            // ── Floating 3D Bottom Navigation Bar ────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF07090E))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Row(
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(elevation = 12.dp, shape = RoundedCornerShape(24.dp))
-                        .background(Color(0xFF111622), RoundedCornerShape(24.dp))
-                        .border(1.dp, Color(0xFF263044), RoundedCornerShape(24.dp))
-                        .padding(horizontal = 6.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                        .shadow(
+                            elevation = 16.dp,
+                            shape = RoundedCornerShape(22.dp),
+                            ambientColor = Color(0xFFDC2626).copy(alpha = 0.25f),
+                            spotColor = Color(0xFFDC2626).copy(alpha = 0.4f)
+                        )
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFDC2626).copy(alpha = 0.5f),
+                                    Color(0xFF30363D),
+                                    Color(0xFFDC2626).copy(alpha = 0.5f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(22.dp)
+                        ),
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFF0F141F).copy(alpha = 0.95f)
                 ) {
-                    HubTab.entries.forEach { tab ->
-                        val isSelected = selectedTab == tab
-                        val scale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.05f else 0.95f,
-                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-                            label = "tab_scale"
-                        )
-                        val pillColor by animateColorAsState(
-                            targetValue = if (isSelected) Color(0xFFDC2626) else Color.Transparent,
-                            label = "tab_color"
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HubTab.values().forEach { tab ->
+                            val isSelected = selectedTab == tab
+                            val scale by animateFloatAsState(
+                                targetValue = if (isSelected) 1.08f else 1.0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ),
+                                label = "tabScale"
+                            )
+                            val containerBg by animateColorAsState(
+                                targetValue = if (isSelected) Color(0xFFDC2626).copy(alpha = 0.2f) else Color.Transparent,
+                                label = "tabBg"
+                            )
 
-                        Box(
-                            modifier = Modifier
-                                .scale(scale)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(pillColor)
-                                .clickable {
-                                    selectedTab = tab
-                                    val targetUrl = "$webBaseUrl${tab.path}"
-                                    webViewInstance?.loadUrl(targetUrl)
-                                }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                modifier = Modifier
+                                    .scale(scale)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(containerBg)
+                                    .clickable { selectedTab = tab }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
-                                Text(tab.iconText, fontSize = 16.sp)
-                                if (isSelected) {
-                                    Text(
-                                        text = tab.title,
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                }
+                                Text(
+                                    text = tab.iconText,
+                                    fontSize = 18.sp
+                                )
+                                Text(
+                                    text = tab.title,
+                                    color = if (isSelected) Color.White else Color(0xFF8B949E),
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 10.sp
+                                )
                             }
                         }
                     }
                 }
             }
         }
-
-        // ── Bridge Diagnostics & Settings Sheet ───────────────────────────────
-        if (showBridgeModal) {
-            AlertDialog(
-                onDismissRequest = { showBridgeModal = false },
-                confirmButton = {
-                    TextButton(onClick = { showBridgeModal = false }) {
-                        Text("Close", color = Color(0xFF58A6FF))
-                    }
-                },
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text("📱", fontSize = 18.sp)
-                        Text("Android Bridge Status", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Text(
-                            "The bridge service runs in the background to automatically intercept incoming WhatsApp, Messenger, and Instagram notifications and route replies.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF8B949E),
-                            lineHeight = 16.sp
-                        )
-
-                        // Notification access button
-                        Button(
-                            onClick = {
-                                onGrantNotificationAccess()
-                                showBridgeModal = false
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238636)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Check Notification Access", fontSize = 12.sp)
-                        }
-
-                        // Disconnect & Unlink
-                        OutlinedButton(
-                            onClick = {
-                                OmniConnectionService.stop(context)
-                                session.clearSession()
-                                onDisconnect()
-                                showBridgeModal = false
-                                Toast.makeText(context, "Device unlinked", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF85149)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Disconnect & Log Out", fontSize = 12.sp)
-                        }
-                    }
-                },
-                containerColor = Color(0xFF161B22),
-                shape = RoundedCornerShape(16.dp)
-            )
-        }
     }
 }
 
-// ── 2. Sleek Dark 3D Login & Sign Up Screen ───────────────────────────────────
+// ── 2. Dedicated Native Device Bridge & Connection Center ────────────────────
+
+@Composable
+fun DeviceBridgeScreen(
+    app: OmniBridgeApp,
+    onGrantNotificationAccess: () -> Unit,
+    onDisconnect: () -> Unit,
+    onOpenPairingScreen: () -> Unit,
+    onNavigateToInbox: () -> Unit,
+) {
+    val context = LocalContext.current
+    val session = app.sessionStore
+    val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
+
+    var isSendingTest by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    var isCheckingAccess by remember { mutableStateOf(false) }
+
+    val hasAccess = isNotificationListenerEnabled(context)
+    val isWsConnected = app.webSocketClient.isConnected()
+    val deviceName = "${Build.MANUFACTURER} ${Build.MODEL}"
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF07090E))
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+
+        // ── Card 1: Connection Health Banner ──────────────────────────────────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    1.dp,
+                    if (hasAccess && isWsConnected) Color(0xFF22C55E).copy(alpha = 0.5f) else Color(0xFFDC2626).copy(alpha = 0.6f),
+                    RoundedCornerShape(16.dp)
+                ),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141F)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .background(
+                                if (hasAccess && isWsConnected) Color(0xFF22C55E) else Color(0xFFF85149),
+                                CircleShape
+                            )
+                    )
+                    Column {
+                        Text(
+                            text = if (hasAccess) "Phone Bridge Ready" else "Notification Permission Required",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = if (hasAccess) "Actively listening for WhatsApp, Messenger & SMS" else "Android is blocking message interception",
+                            color = Color(0xFF8B949E),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFF21262D))
+
+                // Metadata Rows
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Device:", color = Color(0xFF8B949E), fontSize = 12.sp)
+                    Text(deviceName, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Logged In Email:", color = Color(0xFF8B949E), fontSize = 12.sp)
+                    Text(session.userEmail ?: "Unknown", color = Color(0xFF58A6FF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Server Endpoint:", color = Color(0xFF8B949E), fontSize = 12.sp)
+                    Text(session.serverUrl ?: "None", color = Color(0xFFE6EDF3), fontSize = 11.sp)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("WebSocket Live Stream:", color = Color(0xFF8B949E), fontSize = 12.sp)
+                    Text(
+                        if (isWsConnected) "Connected 🟢" else "Reconnecting 🟡",
+                        color = if (isWsConnected) Color(0xFF22C55E) else Color(0xFFE3B341),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        // ── Card 2: Essential Permissions & Xiaomi Setup ─────────────────────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF30363D), RoundedCornerShape(16.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141F)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "⚙️ System Permissions",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 15.sp
+                )
+
+                // 1. Notification Access Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Notification Listener", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text(
+                            text = if (hasAccess) "Granted ✅ — Omni can read chats" else "Required to intercept incoming chats",
+                            color = if (hasAccess) Color(0xFF22C55E) else Color(0xFFF85149),
+                            fontSize = 11.sp
+                        )
+                    }
+                    Button(
+                        onClick = onGrantNotificationAccess,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (hasAccess) Color(0xFF21262D) else Color(0xFFDC2626)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(if (hasAccess) "Check" else "Grant Access", fontSize = 12.sp)
+                    }
+                }
+
+                // 2. Xiaomi / HyperOS Restricted Settings Helper
+                Surface(
+                    color = Color(0xFF161B22),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30363D))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "💡 Xiaomi / HyperOS / MIUI Instructions:",
+                            color = Color(0xFFE3B341),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "If Android shows 'Restricted setting' when granting Notification Access:\n" +
+                                    "1. Tap 'Open Xiaomi App Settings' below\n" +
+                                    "2. Scroll down & tap 'Allow restricted settings'\n" +
+                                    "3. Turn ON 'Autostart' & set Battery to 'No restrictions'\n" +
+                                    "4. Return and grant 'Notification Access'.",
+                            color = Color(0xFF8B949E),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                        Button(
+                            onClick = { openAppDetailsSettings(context) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30363D)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Open Xiaomi App Settings", fontSize = 12.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Card 3: Test Message Dispatcher (Instant Verification) ────────────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF30363D), RoundedCornerShape(16.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141F)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "🧪 Live End-to-End Test",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = "Sends a simulated WhatsApp notification directly from this phone into your Omni database. It will immediately appear in your Inbox!",
+                    color = Color(0xFF8B949E),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+
+                Button(
+                    onClick = {
+                        isSendingTest = true
+                        testResult = null
+                        scope.launch {
+                            val payload = OmniApiClient.MessagePayload(
+                                device_id = session.deviceId ?: "",
+                                device_secret = session.deviceSecret ?: "",
+                                platform = "whatsapp",
+                                sender_name = "Omni Phone Bridge",
+                                sender_handle = "+8801700000000",
+                                content = "Test from ${Build.MODEL}! Phone bridge is connected and syncing perfectly.",
+                                notification_key = "test_ping_${System.currentTimeMillis()}",
+                                app_package = "com.whatsapp",
+                                timestamp_ms = System.currentTimeMillis(),
+                            )
+                            val ok = app.apiClient.sendMessage(payload)
+                            isSendingTest = false
+                            if (ok) {
+                                testResult = "Success! Test message ingested. Tap 'Inbox' to see it."
+                                Toast.makeText(context, "✅ Message synced! Check your Inbox tab.", Toast.LENGTH_LONG).show()
+                            } else {
+                                testResult = "Failed to send message. Please check server URL & Wi-Fi."
+                                Toast.makeText(context, "❌ Delivery failed. Check server IP.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF238636)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSendingTest
+                ) {
+                    Text(
+                        text = if (isSendingTest) "Sending..." else "Send Test Message to Omni Inbox",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (testResult != null) {
+                    Text(
+                        text = testResult!!,
+                        color = if (testResult!!.startsWith("Success")) Color(0xFF22C55E) else Color(0xFFF85149),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        // ── Card 4: Account & Connection Management ───────────────────────────
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF30363D), RoundedCornerShape(16.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141F)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "👤 Account & Device Pairing",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 15.sp
+                )
+
+                Text(
+                    text = "Logged in as: ${session.userEmail ?: "None"}.\nMake sure this matches your computer browser login so messages sync to the same inbox.",
+                    color = Color(0xFF8B949E),
+                    fontSize = 12.sp
+                )
+
+                // Pair with QR Code
+                OutlinedButton(
+                    onClick = onOpenPairingScreen,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF58A6FF))
+                ) {
+                    Text("Re-Pair with Web QR Code", fontSize = 12.sp)
+                }
+
+                // Switch Account / Disconnect
+                Button(
+                    onClick = {
+                        OmniConnectionService.stop(context)
+                        session.clearSession()
+                        onDisconnect()
+                        Toast.makeText(context, "Logged out. You can now log in with another email.", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30363D)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Switch Account / Log In with Different Email", fontSize = 12.sp, color = Color(0xFFF85149))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(30.dp))
+    }
+}
+
+// ── 3. Sleek Dark 3D Login & Sign Up Screen ───────────────────────────────────
 
 @Composable
 fun LoginAndPairScreen(
@@ -450,85 +789,106 @@ fun LoginAndPairScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(brush = background)
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // App Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+            // Brand Logo
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .shadow(16.dp, CircleShape, spotColor = Color(0xFFDC2626))
+                    .background(
+                        brush = Brush.radialGradient(
+                            listOf(Color(0xFFEF4444), Color(0xFF991B1B), Color(0xFF000000))
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .background(
-                                brush = Brush.linearGradient(listOf(Color(0xFFDC2626), Color(0xFF991B1B))),
-                                shape = RoundedCornerShape(10.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Ω", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    }
-                    Column {
-                        Text("Omni Bridge", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Native Android Message Relay", fontSize = 12.sp, color = Color(0xFF8B949E))
-                    }
+                Text("Ω", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Omni Mobile Suite",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp
+                )
+                Text(
+                    text = "Real-time bridge & full communication hub",
+                    color = Color(0xFF8B949E),
+                    fontSize = 12.sp
+                )
+            }
+
+            // 💡 Sync Guidance Note
+            Surface(
+                color = Color(0xFF161B22),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF30363D).copy(alpha = 0.6f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("💡", fontSize = 16.sp)
+                    Text(
+                        text = "Sign in with the SAME email you use on your computer browser so chats sync together.",
+                        color = Color(0xFFE2E8F0),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
                 }
             }
 
-            HorizontalDivider(color = Color(0xFF21262D))
-
-            // Auth Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141E)),
-                shape = RoundedCornerShape(16.dp),
-                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(Color(0xFFDC2626).copy(alpha = 0.4f), Color(0xFF30363D))))
+            // 3D Glassmorphic Form Card
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(14.dp, RoundedCornerShape(18.dp), spotColor = Color(0xFFDC2626).copy(alpha = 0.2f))
+                    .border(1.dp, Color(0xFF30363D), RoundedCornerShape(18.dp)),
+                color = Color(0xFF111622).copy(alpha = 0.95f),
+                shape = RoundedCornerShape(18.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = if (isSignUpMode) "Create Omni Account" else "Sign In to Omni",
-                        fontSize = 18.sp,
+                        text = if (isSignUpMode) "Create Account" else "Sign In & Connect Phone",
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Log in with your Omni account to instantly link this phone and unlock the full inbox, autopilot rules, and 3D visual hub.",
-                        fontSize = 12.sp,
-                        color = Color(0xFF8B949E),
-                        lineHeight = 16.sp
+                        color = Color.White,
+                        fontSize = 16.sp
                     )
 
-                    authError?.let { err ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF3B1219)),
+                    if (authError != null) {
+                        Surface(
+                            color = Color(0xFF3B1812),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF85149))
                         ) {
                             Text(
-                                text = err,
-                                color = Color(0xFFFCA5A5),
+                                text = authError!!,
+                                color = Color(0xFFFF7B72),
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(10.dp)
                             )
                         }
                     }
 
-                    // Server URL
                     OutlinedTextField(
                         value = serverUrl,
                         onValueChange = { serverUrl = it },
-                        label = { Text("Omni Server URL", fontSize = 12.sp) },
+                        label = { Text("Server URL", fontSize = 12.sp) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -666,7 +1026,7 @@ fun LoginAndPairScreen(
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8B949E))
                     ) {
-                        Text("Or Pair with QR Code / Link", fontSize = 12.sp)
+                        Text("🔗 Or Pair with Web QR Code / Link", fontSize = 12.sp)
                     }
                 }
             }
@@ -686,4 +1046,3 @@ fun OmniBridgeTheme(content: @Composable () -> Unit) {
         content = content
     )
 }
-
