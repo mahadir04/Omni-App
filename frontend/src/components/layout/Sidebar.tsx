@@ -19,6 +19,18 @@ export default function Sidebar({ unreadCount = 0 }: SidebarProps) {
     .toUpperCase()
     .slice(0, 2) ?? 'U';
 
+  // Prevent duplicate bottom bar inside the Android app (which has its own native 3D bar)
+  const isAndroidApp = typeof window !== 'undefined' && (
+    navigator.userAgent.includes('OmniAndroidApp') ||
+    navigator.userAgent.includes('; wv') ||
+    navigator.userAgent.includes('Android') && navigator.userAgent.includes('Version/') ||
+    document.body.classList.contains('in-android-app')
+  );
+
+  if (isAndroidApp) {
+    return null;
+  }
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">O</div>

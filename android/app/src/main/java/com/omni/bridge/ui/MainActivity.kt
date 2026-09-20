@@ -321,31 +321,56 @@ fun OmniMobileHub(
                                     allowContentAccess = true
                                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                                     cacheMode = WebSettings.LOAD_DEFAULT
+                                    userAgentString = "${settings.userAgentString} OmniAndroidApp/1.0"
                                 }
 
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                         isPageLoading = true
+                                        // Immediately hide web sidebar inside Android WebView
+                                        view?.evaluateJavascript(
+                                            """
+                                            (function() {
+                                                try {
+                                                    document.body.classList.add('in-android-app');
+                                                    var s = document.getElementById('omni-hide-sidebar');
+                                                    if (!s) {
+                                                        s = document.createElement('style');
+                                                        s.id = 'omni-hide-sidebar';
+                                                        s.innerHTML = '.sidebar { display: none !important; }';
+                                                        document.head.appendChild(s);
+                                                    }
+                                                } catch(e) {}
+                                            })();
+                                            """.trimIndent(),
+                                            null
+                                        )
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         isPageLoading = false
-                                        // Auto-inject JWT token for seamless Single Sign-On
-                                        if (jwtToken.isNotBlank()) {
-                                            view?.evaluateJavascript(
-                                                """
-                                                (function() {
-                                                    try {
-                                                        if (!localStorage.getItem('omni_token')) {
-                                                            localStorage.setItem('omni_token', '$jwtToken');
-                                                            console.log('Omni token injected successfully');
-                                                        }
-                                                    } catch(e) { console.error(e); }
-                                                })();
-                                                """.trimIndent(),
-                                                null
-                                            )
-                                        }
+                                        // Hide web sidebar & auto-inject JWT token for seamless Single Sign-On
+                                        view?.evaluateJavascript(
+                                            """
+                                            (function() {
+                                                try {
+                                                    document.body.classList.add('in-android-app');
+                                                    var s = document.getElementById('omni-hide-sidebar');
+                                                    if (!s) {
+                                                        s = document.createElement('style');
+                                                        s.id = 'omni-hide-sidebar';
+                                                        s.innerHTML = '.sidebar { display: none !important; }';
+                                                        document.head.appendChild(s);
+                                                    }
+                                                    if ('$jwtToken' && !localStorage.getItem('omni_token')) {
+                                                        localStorage.setItem('omni_token', '$jwtToken');
+                                                        console.log('Omni token injected successfully');
+                                                    }
+                                                } catch(e) { console.error(e); }
+                                            })();
+                                            """.trimIndent(),
+                                            null
+                                        )
                                     }
                                 }
 

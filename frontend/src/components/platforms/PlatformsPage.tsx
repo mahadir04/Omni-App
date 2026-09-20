@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, MessageSquare, RefreshCw, Send, Smartphone, SmartphoneCharging, Trash2, Copy, Check
+  Plus, MessageSquare, RefreshCw, Send, Smartphone, SmartphoneCharging, Trash2, Copy, Check, Download
 } from 'lucide-react';
 import { listPlatforms, connectPlatform, simulateMessage, listDevices, getPairingInfo, deleteDevice } from '../../api';
 import type { PlatformConnection, DeviceConnection, PairingInfo } from '../../types';
@@ -271,14 +271,25 @@ export default function PlatformsPage() {
                   Connect your Android phone to intercept WhatsApp, Messenger, and Instagram notifications locally. Messages flow directly into your Omni inbox, and replies are auto-routed through your phone.
                 </div>
               </div>
-              <button
-                className="btn-primary"
-                onClick={() => handlePairClick()}
-                disabled={pairingLoading}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                <SmartphoneCharging size={16} /> {pairingLoading ? 'Connecting...' : 'Pair Android Phone'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <a
+                  href="/app-debug.apk"
+                  download="omni-bridge-latest.apk"
+                  className="btn-secondary"
+                  style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
+                  title="Download Latest Android Bridge APK"
+                >
+                  <Download size={15} /> Download APK
+                </a>
+                <button
+                  className="btn-primary"
+                  onClick={() => handlePairClick()}
+                  disabled={pairingLoading}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  <SmartphoneCharging size={16} /> {pairingLoading ? 'Connecting...' : 'Pair Android Phone'}
+                </button>
+              </div>
             </div>
 
             {pairError && (
