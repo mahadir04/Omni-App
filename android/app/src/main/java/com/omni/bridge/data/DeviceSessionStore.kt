@@ -50,6 +50,13 @@ class DeviceSessionStore(context: Context) {
     val isPaired: Boolean
         get() = deviceId != null && deviceSecret != null && serverUrl != null
 
+    fun saveSession(serverUrl: String, deviceId: String, deviceSecret: String, userEmail: String? = null) {
+        this.serverUrl = serverUrl
+        this.deviceId = deviceId
+        this.deviceSecret = deviceSecret
+        this.userEmail = userEmail
+    }
+
     fun clearSession() {
         prefs.edit().clear().apply()
     }

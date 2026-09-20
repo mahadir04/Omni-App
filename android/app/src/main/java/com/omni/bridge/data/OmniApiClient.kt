@@ -28,7 +28,64 @@ class OmniApiClient(private val session: DeviceSessionStore) {
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    // ── Register device (called during pairing) ───────────────────────────
+    // ── Authentication (Login & Signup directly from phone) ───────────────
+
+    suspend fun login(
+        serverUrl: String,
+        email: String,
+        password: String,
+    ): String? = withContext(Dispatchers.IO) {
+        val body = mapOf("email" to email, "password" to password)
+        val request = Request.Builder()
+            .url("$serverUrl/api/auth/login")
+            .post(gson.toJson(body).toRequestBody(json))
+            .build()
+
+        runCatching {
+            http.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val map = gson.fromJson(response.body?.string(), Map::class.java)
+                    map["access_token"] as? String
+                } else {
+                    Log.e(TAG, "Login failed: ${response.code}")
+                    null
+                }
+            }
+        }.getOrElse { e ->
+            Log.e(TAG, "Login network error: $e")
+            null
+        }
+    }
+
+    suspend fun signup(
+        serverUrl: String,
+        fullName: String,
+        email: String,
+        password: String,
+    ): String? = withContext(Dispatchers.IO) {
+        val body = mapOf("full_name" to fullName, "email" to email, "password" to password)
+        val request = Request.Builder()
+            .url("$serverUrl/api/auth/signup")
+            .post(gson.toJson(body).toRequestBody(json))
+            .build()
+
+        runCatching {
+            http.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    // Auto login after signup
+                    login(serverUrl, email, password)
+                } else {
+                    Log.e(TAG, "Signup failed: ${response.code}")
+                    null
+                }
+            }
+        }.getOrElse { e ->
+            Log.e(TAG, "Signup network error: $e")
+            null
+        }
+    }
+
+    // ── Register device (called during pairing or direct login) ───────────
 
     suspend fun registerDevice(
         serverUrl: String,
