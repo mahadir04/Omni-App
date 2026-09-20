@@ -12,7 +12,7 @@ from app.models.platform_connection import PlatformConnection
 from app.models.user import User
 from app.schemas.message import SimulateMessageRequest
 from app.services.ingestion_service import ingest_message
-from app.tasks.ai_tasks import process_message_sync
+from app.tasks.ai_tasks import process_message_ai, process_message_sync
 
 logger = logging.getLogger(__name__)
 
@@ -38,21 +38,32 @@ async def _resolve_webhook_user(db: AsyncSession, platform: str) -> User | None:
 
 @router.get("/webhooks/{platform}")
 async def verify_webhook(platform: str, request: Request):
-    """Handle Meta / Messenger / WhatsApp webhook verification challenge."""
+    """Webhook verification endpoint."""
+    if platform in ("whatsapp", "messenger", "instagram"):
+        return {
+            "status": "disabled",
+            "reason": f"Meta Cloud API for {platform} has been removed. Use Android Phone Bridge.",
+        }
+
     params = request.query_params
     hub_mode = params.get("hub.mode")
     hub_challenge = params.get("hub.challenge")
-    hub_verify_token = params.get("hub.verify_token")
 
     if hub_mode == "subscribe" and hub_challenge:
-        # Return challenge as plain text
         return Response(content=hub_challenge, media_type="text/plain")
     return {"status": "ok", "platform": platform}
 
 
 @router.post("/webhooks/{platform}")
 async def receive_webhook(platform: str, request: Request, db: DbSession):
-    """Receive live inbound webhook from an external platform (Twilio, Slack, Messenger, Email, etc.)."""
+    """Receive live inbound webhook from an external platform (Twilio SMS, Slack, Telegram, Email, etc.)."""
+    # Meta Cloud API / WhatsApp / Messenger / Instagram are routed strictly via Phone Bridge
+    if platform in ("whatsapp", "messenger", "instagram"):
+        return {
+            "status": "ignored",
+            "reason": f"{platform} is handled via the Android phone bridge, not the cloud webhook.",
+        }
+
     content_type = request.headers.get("content-type", "")
 
     sender_name = "Incoming Contact"
@@ -81,6 +92,7 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
                 sender_handle = event.get("user", "slack_user")
                 sender_name = f"Slack User ({sender_handle})"
                 platform_msg_id = event.get("client_msg_id") or event.get("ts")
+
             elif platform == "telegram":
                 # Telegram Bot webhook payload
                 tg_msg = body.get("message") or body.get("channel_post") or body.get("edited_message") or {}
@@ -93,32 +105,7 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
                 username = tg_from.get("username", "")
                 sender_name = f"{first_name} {last_name}".strip() or (f"@{username}" if username else f"Telegram User {sender_handle}")
                 platform_msg_id = str(tg_msg.get("message_id") or uuid.uuid4())
-            elif platform == "messenger" and "entry" in body:
-                # Meta / Facebook Messenger webhook payload format
-                entries = body.get("entry", [])
-                for entry in entries:
-                    for messaging in entry.get("messaging", []):
-                        if "message" in messaging:
-                            msg_obj = messaging.get("message", {})
-                            content = msg_obj.get("text", "")
-                            platform_msg_id = msg_obj.get("mid")
-                            sender_handle = str(messaging.get("sender", {}).get("id", "messenger_user"))
-                            sender_name = f"Messenger User ({sender_handle[-4:] if len(sender_handle) >= 4 else sender_handle})"
-                            break
-            elif platform == "whatsapp" and "entry" in body:
-                # Meta WhatsApp Cloud API webhook payload
-                entries = body.get("entry", [])
-                for entry in entries:
-                    for change in entry.get("changes", []):
-                        value = change.get("value", {})
-                        contacts_list = value.get("contacts", [])
-                        contact_profile = contacts_list[0].get("profile", {}).get("name") if contacts_list else None
-                        for msg_item in value.get("messages", []):
-                            content = msg_item.get("text", {}).get("body", "")
-                            sender_handle = str(msg_item.get("from", "whatsapp_user"))
-                            sender_name = contact_profile or f"WhatsApp ({sender_handle})"
-                            platform_msg_id = str(msg_item.get("id") or uuid.uuid4())
-                            break
+
             else:
                 # Generic JSON / Postmark / SendGrid / Custom
                 content = (
@@ -135,6 +122,7 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
         except Exception as e:
             logger.error(f"Failed to parse JSON webhook: {e}")
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
 
     elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
         # Twilio WhatsApp / SMS webhook format
@@ -171,10 +159,14 @@ async def receive_webhook(platform: str, request: Request, db: DbSession):
     )
 
     # ── 4. Process AI analysis & Autopilot / Review decision ─────────────
-    await process_message_sync(message.id, user.id)
+    try:
+        process_message_ai.delay(str(message.id), str(user.id))
+    except Exception as e:
+        logger.warning(f"Celery dispatch failed ({e}), falling back to sync processing")
+        await process_message_sync(message.id, user.id)
 
     # ── 5. Return platform-compatible receipt ────────────────────────────
-    if platform in ("whatsapp", "sms") and ("form-urlencoded" in content_type or "multipart" in content_type):
+    if platform == "sms" and ("form-urlencoded" in content_type or "multipart" in content_type):
         return Response(content="<Response></Response>", media_type="application/xml")
 
     return {

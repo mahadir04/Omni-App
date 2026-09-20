@@ -103,6 +103,21 @@ export interface PlatformConnection {
   created_at: string;
 }
 
+export interface DeviceConnection {
+  device_id: string;
+  device_name: string;
+  is_online: boolean;
+  last_seen_at: string | null;
+  created_at: string;
+}
+
+export interface PairingInfo {
+  server_url: string;
+  token: string;
+  deep_link: string;
+  user_email: string;
+}
+
 // ── WebSocket Events ──────────────────────────────────────────────────────
 
 export interface WsNewMessageEvent {

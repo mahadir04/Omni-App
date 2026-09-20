@@ -25,15 +25,60 @@ logger = logging.getLogger(__name__)
 from app.models.platform_connection import PlatformConnection
 
 
+async def _dispatch_to_phone(
+    device_id: str,
+    notification_key: str,
+    content: str,
+    conversation_id: str,
+    platform: str,
+) -> str:
+    """Send reply to Android device via WebSocket → RemoteInput → native app."""
+    from app.websocket.device_ws import device_ws_manager
+
+    delivered_live = await device_ws_manager.send_reply_push(
+        device_id=device_id,
+        notification_key=notification_key,
+        content=content,
+        conversation_id=conversation_id,
+        platform=platform,
+    )
+    return "delivered_phone_bridge" if delivered_live else "queued_phone_bridge_offline"
+
+
 async def _dispatch_to_platform(
     db: AsyncSession,
     user_id: uuid.UUID,
     platform: str,
     recipient_handle: str,
     content: str,
+    conversation_metadata: dict | None = None,
 ) -> str:
-    """Send message via platform API if credentials are provided."""
-    # Look up connection token if stored in database
+    """Send message via platform API if credentials are provided.
+    
+    Phone-bridged platforms (whatsapp, messenger, instagram) are routed
+    via _dispatch_to_phone. Cloud API platforms use their respective APIs.
+    """
+    # ── Phone Bridge (whatsapp, messenger, instagram) ─────────────────────
+    meta = conversation_metadata or {}
+    if meta.get("source") == "phone_bridge":
+        device_id = meta.get("device_id", "")
+        notification_key = meta.get("notification_key", "")
+        if device_id and notification_key:
+            return await _dispatch_to_phone(
+                device_id=device_id,
+                notification_key=notification_key,
+                content=content,
+                conversation_id=meta.get("conversation_id", ""),
+                platform=platform,
+            )
+        else:
+            logger.warning(
+                f"Phone bridge metadata missing device_id or notification_key "
+                f"for conversation. Falling back to local delivery."
+            )
+        return "delivered_local"
+
+    # Look up connection token
     conn_res = await db.execute(
         select(PlatformConnection).where(
             PlatformConnection.user_id == user_id,
@@ -59,27 +104,7 @@ async def _dispatch_to_platform(
             except Exception as e:
                 logger.error(f"Error dispatching to Telegram: {e}")
 
-    # ── Messenger ────────────────────────────────────────────────────────
-    if platform == "messenger":
-        token = access_token or getattr(settings, "meta_page_access_token", None)
-        if token and token != "mock-token":
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    res = await client.post(
-                        "https://graph.facebook.com/v19.0/me/messages",
-                        params={"access_token": token},
-                        json={
-                            "recipient": {"id": recipient_handle},
-                            "message": {"text": content},
-                        },
-                    )
-                    if res.status_code in (200, 201):
-                        return "delivered_messenger"
-                    logger.warning(f"Messenger dispatch failed: {res.text}")
-            except Exception as e:
-                logger.error(f"Error dispatching to Messenger: {e}")
-
-    # ── Slack ────────────────────────────────────────────────────────────
+    # ── Slack ─────────────────────────────────────────────────────────────
     if platform == "slack":
         token = access_token or settings.slack_bot_token
         if token and token != "mock-token":
@@ -97,30 +122,25 @@ async def _dispatch_to_platform(
             except Exception as e:
                 logger.error(f"Error dispatching to Slack: {e}")
 
-    # ── Twilio (WhatsApp & SMS) ──────────────────────────────────────────
-    if platform in ("whatsapp", "sms") and settings.twilio_account_sid and settings.twilio_auth_token:
+    # ── Twilio SMS ────────────────────────────────────────────────────────
+    if platform == "sms" and settings.twilio_account_sid and settings.twilio_auth_token:
         try:
             url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}/Messages.json"
             from_number = settings.twilio_phone_number or ""
-            if platform == "whatsapp" and not from_number.startswith("whatsapp:"):
-                from_number = f"whatsapp:{from_number}"
-            to_number = recipient_handle
-            if platform == "whatsapp" and not to_number.startswith("whatsapp:"):
-                to_number = f"whatsapp:{to_number}"
-
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.post(
                     url,
                     auth=(settings.twilio_account_sid, settings.twilio_auth_token),
-                    data={"From": from_number, "To": to_number, "Body": content},
+                    data={"From": from_number, "To": recipient_handle, "Body": content},
                 )
                 if res.status_code in (200, 201):
-                    return f"delivered_{platform}"
-                logger.warning(f"Twilio message send returned {res.status_code}: {res.text}")
+                    return "delivered_sms"
+                logger.warning(f"Twilio SMS send returned {res.status_code}: {res.text}")
         except Exception as e:
-            logger.error(f"Error dispatching to Twilio: {e}")
+            logger.error(f"Error dispatching to Twilio SMS: {e}")
 
     return "delivered_local"
+
 
 
 async def send_reply(
@@ -142,7 +162,7 @@ async def send_reply(
     5. Records audit log
     6. Broadcasts via WebSocket
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Lookup contact handle for destination
     conv_result = await db.execute(
@@ -158,10 +178,15 @@ async def send_reply(
         if contact:
             recipient_handle = contact.platform_handle
 
-    # Dispatch to platform
+    # Dispatch to platform (phone bridge if conversation.metadata_.source == "phone_bridge")
+    conv_meta = dict(conversation.metadata_) if conversation and conversation.metadata_ else {}
+    if conversation:
+        conv_meta["conversation_id"] = str(conversation.id)
     delivery_status = await _dispatch_to_platform(
-        db, user_id, platform, recipient_handle, content
+        db, user_id, platform, recipient_handle, content,
+        conversation_metadata=conv_meta,
     )
+
 
     # Store outbound message
     outbound_msg = Message(

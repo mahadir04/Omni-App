@@ -28,6 +28,7 @@ async def ingest_message(
     platform_msg_id: str | None = None,
     raw_payload: dict | None = None,
     is_vip: bool = False,
+    bridge_metadata: dict | None = None,  # phone bridge routing info
 ) -> tuple[Message, Conversation, Contact]:
     """Normalize and store an inbound message. Returns (message, conversation, contact).
 
@@ -61,7 +62,7 @@ async def ingest_message(
         await db.flush()
 
     # Update last_seen
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     contact.last_seen_at = now
 
     # ── 2. Find or create Conversation ───────────────────────────────────
@@ -80,11 +81,28 @@ async def ingest_message(
             contact_id=contact.id,
             platform=platform,
             status="open",
+            metadata_=bridge_metadata or {},
         )
         db.add(conversation)
         await db.flush()
+    elif bridge_metadata:
+        # Always update notification_key — each new message has a fresh RemoteInput action
+        conversation.metadata_ = {**conversation.metadata_, **bridge_metadata}
 
-    # ── 3. Create Message ────────────────────────────────────────────────
+    # ── 3. Idempotency check: return existing message if already ingested ─
+    if platform_msg_id:
+        existing_res = await db.execute(
+            select(Message).where(
+                Message.conversation_id == conversation.id,
+                Message.platform_msg_id == platform_msg_id,
+            )
+        )
+        existing_msg = existing_res.scalar_one_or_none()
+        if existing_msg:
+            await db.commit()
+            return existing_msg, conversation, contact
+
+    # ── 4. Create Message ────────────────────────────────────────────────
     message = Message(
         conversation_id=conversation.id,
         direction="inbound",
@@ -96,7 +114,7 @@ async def ingest_message(
     )
     db.add(message)
 
-    # ── 4. Update conversation metadata ──────────────────────────────────
+    # ── 5. Update conversation metadata ──────────────────────────────────
     conversation.last_message_at = now
     conversation.unread_count += 1
 

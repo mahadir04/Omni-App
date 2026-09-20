@@ -22,20 +22,25 @@ if "?" in db_url:
     db_url = f"{base_part}?{'&'.join(params)}" if params else base_part
 
 # Supabase / any cloud Postgres requires SSL — pass via connect_args
-ssl_ctx = ssl.create_default_context()
-ssl_ctx.check_hostname = False
-ssl_ctx.verify_mode = ssl.CERT_NONE  # disable cert verification for Supabase pooler
+# Local Docker / localhost Postgres does not support/require SSL
+connect_args = {
+    "statement_cache_size": 0,
+    "prepared_statement_cache_size": 0,
+}
+
+is_local = any(host in db_url.lower() for host in ["@db:", "localhost", "127.0.0.1"])
+if not is_local:
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE  # disable cert verification for Supabase pooler
+    connect_args["ssl"] = ssl_ctx
 
 engine = create_async_engine(
     db_url,
     echo=settings.debug,
     pool_size=5,
     max_overflow=10,
-    connect_args={
-        "ssl": ssl_ctx,
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-    },
+    connect_args=connect_args,
 )
 
 async_session_factory = async_sessionmaker(

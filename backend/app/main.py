@@ -2,11 +2,14 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import async_session_factory
+from app.dependencies import get_db
 from app.websocket import ws_manager
 
 
@@ -68,6 +71,7 @@ def create_app() -> FastAPI:
     from app.routers.platforms import router as platforms_router
     from app.routers.contacts import router as contacts_router
     from app.routers.webhooks import router as webhooks_router
+    from app.routers.device import router as device_router
 
     app.include_router(auth_router)
     app.include_router(conversations_router)
@@ -76,8 +80,9 @@ def create_app() -> FastAPI:
     app.include_router(platforms_router)
     app.include_router(contacts_router)
     app.include_router(webhooks_router)
+    app.include_router(device_router)
 
-    # ── WebSocket endpoint ───────────────────────────────────────────────
+    # ── WebSocket endpoint (browser) ─────────────────────────────────────
     @app.websocket("/ws/{user_id}")
     async def websocket_endpoint(websocket: WebSocket, user_id: str):
         await ws_manager.connect(websocket, user_id)
@@ -87,6 +92,17 @@ def create_app() -> FastAPI:
                 await websocket.receive_text()
         except WebSocketDisconnect:
             ws_manager.disconnect(websocket, user_id)
+
+    # ── WebSocket endpoint (Android device bridge) ────────────────────────
+    @app.websocket("/ws/device/{device_id}")
+    async def device_websocket_endpoint(
+        websocket: WebSocket,
+        device_id: str,
+        secret: str,
+        db: AsyncSession = Depends(get_db),
+    ):
+        from app.routers.device import device_websocket_handler
+        await device_websocket_handler(websocket, device_id, secret, db)
 
     # ── Root & Health check ──────────────────────────────────────────────
     @app.get("/")
@@ -100,6 +116,7 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/health")
+    @app.get("/api/health")
     async def health():
         return {"status": "ok", "app": settings.app_name}
 

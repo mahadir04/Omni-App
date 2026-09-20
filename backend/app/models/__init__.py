@@ -11,3 +11,4 @@ from app.models.voice_profile import VoiceProfile  # noqa: F401
 from app.models.knowledge_base import KnowledgeBaseEntry  # noqa: F401
 from app.models.key_action import KeyAction  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
+from app.models.device_connection import DeviceConnection  # noqa: F401

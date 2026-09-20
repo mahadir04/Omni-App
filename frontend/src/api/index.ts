@@ -71,6 +71,17 @@ export const reconnectPlatform = (id: string) =>
 export const updateContact = (id: string, data: { is_vip?: boolean; display_name?: string }) =>
   api.patch(`/contacts/${id}`, data).then((r) => r.data);
 
+// ── Device Bridge ─────────────────────────────────────────────────────────
+
+export const listDevices = () =>
+  api.get<import('../types').DeviceConnection[]>('/device/status').then((r) => r.data);
+
+export const getPairingInfo = () =>
+  api.get<import('../types').PairingInfo>('/device/pairing-info').then((r) => r.data);
+
+export const deleteDevice = (deviceId: string) =>
+  api.delete(`/device/${deviceId}`);
+
 // ── Dev ───────────────────────────────────────────────────────────────────
 
 export const simulateMessage = (data: {

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, MessageSquare, RefreshCw, Send
+  Plus, MessageSquare, RefreshCw, Send, Smartphone, SmartphoneCharging, Trash2, Copy, Check
 } from 'lucide-react';
-import { listPlatforms, connectPlatform, simulateMessage } from '../../api';
-import type { PlatformConnection } from '../../types';
+import { listPlatforms, connectPlatform, simulateMessage, listDevices, getPairingInfo, deleteDevice } from '../../api';
+import type { PlatformConnection, DeviceConnection, PairingInfo } from '../../types';
 import Sidebar from '../layout/Sidebar';
 import { AddPlatformModal, PlatformRulesModal } from './PlatformModals';
 
@@ -11,6 +11,7 @@ const PLATFORM_ICONS: Record<string, { color: string; letter: string }> = {
   telegram: { color: '#229ED9', letter: 'TG' },
   whatsapp: { color: '#25D366', letter: 'W' },
   messenger: { color: '#0084FF', letter: 'M' },
+  instagram: { color: '#E1306C', letter: 'IG' },
   slack: { color: '#4A154B', letter: '#' },
   email: { color: '#F59E0B', letter: '@' },
   linkedin: { color: '#0A66C2', letter: 'in' },
@@ -19,6 +20,10 @@ const PLATFORM_ICONS: Record<string, { color: string; letter: string }> = {
 
 export default function PlatformsPage() {
   const [platforms, setPlatforms] = useState<PlatformConnection[]>([]);
+  const [devices, setDevices] = useState<DeviceConnection[]>([]);
+  const [pairingInfo, setPairingInfo] = useState<PairingInfo | null>(null);
+  const [showPairingModal, setShowPairingModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<PlatformConnection | null>(null);
@@ -32,15 +37,40 @@ export default function PlatformsPage() {
 
   const load = () => {
     setLoading(true);
-    listPlatforms()
-      .then(setPlatforms)
-      .catch(console.error)
+    Promise.all([
+      listPlatforms().catch(() => []),
+      listDevices().catch(() => []),
+    ])
+      .then(([platData, devData]) => {
+        setPlatforms(platData);
+        setDevices(devData);
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  const handlePairClick = async () => {
+    try {
+      const info = await getPairingInfo();
+      setPairingInfo(info);
+      setShowPairingModal(true);
+    } catch (e) {
+      console.error('Failed to get pairing info', e);
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!confirm('Unpair this Android device?')) return;
+    try {
+      await deleteDevice(deviceId);
+      load();
+    } catch (e) {
+      console.error('Failed to delete device', e);
+    }
+  };
 
   const handleReconnect = async (p: PlatformConnection) => {
     try {
@@ -210,20 +240,104 @@ export default function PlatformsPage() {
             )}
           </div>
 
+          {/* Android Phone Bridge Section */}
+          <div className="settings-card" style={{ border: '1px solid #238636', background: 'rgba(35, 134, 54, 0.04)' }}>
+            <div className="settings-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div className="settings-card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Smartphone size={18} color="#3FB950" />
+                  <span>Android Phone Bridge (WhatsApp, Messenger, Instagram, SMS)</span>
+                  <span style={{ fontSize: 11, background: '#238636', color: 'white', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>
+                    Zero Meta API Fees
+                  </span>
+                </div>
+                <div className="settings-card-desc" style={{ marginTop: 4 }}>
+                  Connect your Android phone to intercept WhatsApp, Messenger, and Instagram notifications locally. Messages flow directly into your Omni inbox, and replies are auto-routed through your phone.
+                </div>
+              </div>
+              <button className="btn-primary" onClick={handlePairClick} style={{ whiteSpace: 'nowrap' }}>
+                <SmartphoneCharging size={16} /> Pair Android Phone
+              </button>
+            </div>
+
+            {/* Devices List */}
+            <div style={{ marginTop: 14 }}>
+              {devices.length === 0 ? (
+                <div style={{
+                  padding: '16px',
+                  background: 'var(--bg-primary)',
+                  borderRadius: 8,
+                  border: '1px dashed var(--border-color)',
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)',
+                  fontSize: 13,
+                }}>
+                  No Android phones paired yet. Click <b>Pair Android Phone</b> to link your device.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+                  {devices.map((d) => (
+                    <div
+                      key={d.device_id}
+                      style={{
+                        padding: '12px 14px',
+                        background: 'var(--bg-primary)',
+                        borderRadius: 8,
+                        border: '1px solid var(--border-color)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            background: d.is_online ? '#3FB950' : '#8B949E',
+                            display: 'inline-block',
+                            boxShadow: d.is_online ? '0 0 8px #3FB950' : 'none',
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
+                            {d.device_name}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            {d.is_online ? 'Live Connected' : d.last_seen_at ? `Last seen ${new Date(d.last_seen_at).toLocaleTimeString()}` : 'Offline'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteDevice(d.device_id)}
+                        className="btn-icon"
+                        style={{ color: '#F85149', background: 'transparent', border: 'none', cursor: 'pointer', padding: 6 }}
+                        title="Unpair Device"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Live Webhook Reference Card */}
           <div className="settings-card" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
             <div className="settings-card-header">
               <div className="settings-card-title">📡 Live Inbound Webhook Endpoints</div>
               <div className="settings-card-desc">
-                Paste these public webhook URLs into your platform developer dashboards (Twilio, Meta, Slack) to receive real-time messages.
+                Public webhook endpoints for cloud-based channels (Telegram, Slack, Twilio SMS).
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, marginTop: 8 }}>
               {[
-                { name: 'Telegram Bot', method: 'Automatic', path: '/api/webhooks/telegram', note: 'Configured automatically when pasting Bot Token' },
-                { name: 'WhatsApp (Twilio/Meta)', method: 'POST', path: '/api/webhooks/whatsapp', note: 'Paste in Twilio Sandbox or Meta Cloud API' },
-                { name: 'Facebook Messenger', method: 'POST', path: '/api/webhooks/messenger', note: 'Subscribe to messages in Meta App' },
-                { name: 'Slack Events', method: 'POST', path: '/api/webhooks/slack', note: 'Request URL in Event Subscriptions' },
+                { name: 'Telegram Bot', method: 'Automatic', path: '/api/webhooks/telegram', note: 'Auto-configured when connecting Bot Token' },
+                { name: 'Slack Events', method: 'POST', path: '/api/webhooks/slack', note: 'Request URL in Slack Event Subscriptions' },
+                { name: 'Twilio SMS', method: 'POST', path: '/api/webhooks/sms', note: 'Twilio Phone Number webhook URL' },
+                { name: 'Phone Bridge', method: 'WebSocket / REST', path: '/ws/device/{device_id}', note: 'WhatsApp, Messenger, Instagram local bridge' },
               ].map((wh) => (
                 <div key={wh.name} style={{
                   padding: '10px 12px',
@@ -237,7 +351,7 @@ export default function PlatformsPage() {
                     <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-tertiary)', fontWeight: 600 }}>{wh.method}</span>
                   </div>
                   <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#3B82F6', wordBreak: 'break-all' }}>
-                    https://omni-app-wt70.onrender.com{wh.path}
+                    {wh.path.startsWith('/ws') ? `ws://localhost:8000${wh.path}` : `https://omni-app-wt70.onrender.com${wh.path}`}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>{wh.note}</div>
                 </div>
@@ -329,6 +443,96 @@ export default function PlatformsPage() {
         onClose={() => setSelectedPlatform(null)}
         onUpdated={load}
       />
+
+      {/* Phone Pairing Modal */}
+      {showPairingModal && pairingInfo && (
+        <div className="modal-backdrop" onClick={() => setShowPairingModal(false)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540 }}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Smartphone size={20} color="#3FB950" />
+                <span>Pair Android Companion App</span>
+              </div>
+              <button className="modal-close" onClick={() => setShowPairingModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                Open the <b>Omni Bridge</b> app on your Android phone and use the deep link or enter your credentials below.
+              </p>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">One-Click Deep Link (Tap on Android phone or browser):</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    readOnly
+                    className="form-input"
+                    value={pairingInfo.deep_link}
+                    style={{ fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(pairingInfo.deep_link);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2500);
+                    }}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                    {copiedLink ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 12 }}>
+                <label className="form-label">Server URL:</label>
+                <input
+                  type="text"
+                  readOnly
+                  className="form-input"
+                  value={pairingInfo.server_url}
+                  style={{ fontFamily: 'monospace', fontSize: 12 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Auth Token:</label>
+                <textarea
+                  readOnly
+                  className="form-input"
+                  rows={3}
+                  value={pairingInfo.token}
+                  style={{ fontFamily: 'monospace', fontSize: 11, resize: 'none' }}
+                />
+              </div>
+
+              <div style={{
+                background: 'rgba(56, 139, 253, 0.08)',
+                border: '1px solid rgba(56, 139, 253, 0.25)',
+                borderRadius: 8,
+                padding: '10px 14px',
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+              }}>
+                <b>Next steps on your phone:</b>
+                <ol style={{ paddingLeft: 18, marginTop: 6, marginBottom: 0 }}>
+                  <li>Open Omni Bridge app</li>
+                  <li>Grant <i>Notification Access</i> in Android Settings</li>
+                  <li>Paste the deep link or Server URL + Token</li>
+                  <li>Tap <b>Pair Device</b> — your phone is now live!</li>
+                </ol>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowPairingModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

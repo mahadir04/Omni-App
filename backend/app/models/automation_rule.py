@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, ForeignKey, Numeric, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,7 @@ class AutomationRule(Base):
         nullable=False,
     )
     master_switch_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
+        Boolean, nullable=False, default=False
     )
     response_strategy: Mapped[str] = mapped_column(
         Text, nullable=False, default="human_in_the_loop"
@@ -45,7 +45,7 @@ class AutomationRule(Base):
         Text, nullable=False, default="approved"
     )  # draft | approved
     updated_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     # ── Relationships ────────────────────────────────────────────────────

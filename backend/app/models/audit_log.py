@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +24,7 @@ class AuditLog(Base):
     )
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("conversations.id"),
+        ForeignKey("conversations.id", ondelete="SET NULL"),
         nullable=True,
     )
     message_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -38,7 +38,7 @@ class AuditLog(Base):
     )  # approve_send | custom_edit | delay_send | auto_send | plan_approved | ...
     details: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     # ── Relationships ────────────────────────────────────────────────────

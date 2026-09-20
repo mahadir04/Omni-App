@@ -11,8 +11,9 @@ interface AddPlatformModalProps {
 
 const AVAILABLE_PLATFORMS = [
   { id: 'telegram', name: 'Telegram', color: '#229ED9', letter: 'TG', placeholder: 'e.g. 7123456789:AAHk...', desc: 'Connect free bot created with @BotFather', isToken: true },
-  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', letter: 'W', placeholder: '+1 (555) 234-5678', desc: 'Twilio Sandbox or Meta Cloud API' },
-  { id: 'messenger', name: 'Messenger', color: '#0084FF', letter: 'M', placeholder: 'Facebook Page ID or Page Name', desc: 'Facebook & Meta Messenger' },
+  { id: 'whatsapp', name: 'WhatsApp', color: '#25D366', letter: 'W', placeholder: 'e.g. My WhatsApp', desc: 'Android Phone Bridge (Zero Meta Cloud API)' },
+  { id: 'messenger', name: 'Messenger', color: '#0084FF', letter: 'M', placeholder: 'e.g. My Messenger', desc: 'Android Phone Bridge (Zero Meta Graph API)' },
+  { id: 'instagram', name: 'Instagram', color: '#E1306C', letter: 'IG', placeholder: 'e.g. My Instagram', desc: 'Android Phone Bridge' },
   { id: 'slack', name: 'Slack', color: '#4A154B', letter: '#', placeholder: 'acme-corp.slack.com', desc: 'Bot Token or Workspace' },
   { id: 'email', name: 'Email', color: '#F59E0B', letter: '@', placeholder: 'user@company.com', desc: 'Work inbox & newsletters' },
   { id: 'linkedin', name: 'LinkedIn', color: '#0A66C2', letter: 'in', placeholder: 'linkedin.com/in/profile', desc: 'InMail & network messages' },
@@ -24,20 +25,12 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
   const [profileName, setProfileName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [apiToken, setApiToken] = useState('');
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const currentPlatformInfo = AVAILABLE_PLATFORMS.find((p) => p.id === selectedPlatform)!;
-  const webhookUrl = `https://omni-app-wt70.onrender.com/api/webhooks/${selectedPlatform}`;
-
-  const copyWebhook = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2500);
-  };
 
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,60 +121,22 @@ export function AddPlatformModal({ isOpen, onClose, onSuccess }: AddPlatformModa
               </div>
             )}
 
-            {selectedPlatform === 'whatsapp' && (
+            {(selectedPlatform === 'whatsapp' || selectedPlatform === 'messenger' || selectedPlatform === 'instagram') && (
               <div style={{
-                background: 'rgba(37, 211, 102, 0.08)',
-                border: '1px solid rgba(37, 211, 102, 0.25)',
+                background: 'rgba(35, 134, 54, 0.08)',
+                border: '1px solid rgba(35, 134, 54, 0.25)',
                 borderRadius: 8,
                 padding: '10px 14px',
                 fontSize: 12,
                 color: 'var(--text-secondary)',
                 lineHeight: 1.5,
               }}>
-                <div style={{ fontWeight: 700, color: '#25D366', marginBottom: 4 }}>
-                  🔗 Webhook URL for Twilio / Meta Cloud API
+                <div style={{ fontWeight: 700, color: '#3FB950', marginBottom: 4 }}>
+                  📱 Omni Android Phone Bridge
                 </div>
-                Paste this Webhook URL in your Twilio WhatsApp Sandbox or Meta App settings:
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <input
-                    type="text"
-                    readOnly
-                    className="form-input"
-                    style={{ fontSize: 11, fontFamily: 'monospace', padding: '6px 8px' }}
-                    value={webhookUrl}
-                  />
-                  <button type="button" className="btn-secondary" onClick={copyWebhook} style={{ whiteSpace: 'nowrap', fontSize: 11, padding: '6px 12px' }}>
-                    {copiedWebhook ? '✓ Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {selectedPlatform === 'messenger' && (
-              <div style={{
-                background: 'rgba(0, 132, 255, 0.08)',
-                border: '1px solid rgba(0, 132, 255, 0.25)',
-                borderRadius: 8,
-                padding: '10px 14px',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                lineHeight: 1.5,
-              }}>
-                <div style={{ fontWeight: 700, color: '#0084FF', marginBottom: 4 }}>
-                  🔗 Meta Messenger Webhook URL
-                </div>
-                In Meta Developer Dashboard &gt; Messenger &gt; Webhooks, subscribe to <code>messages</code>:
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <input
-                    type="text"
-                    readOnly
-                    className="form-input"
-                    style={{ fontSize: 11, fontFamily: 'monospace', padding: '6px 8px' }}
-                    value={webhookUrl}
-                  />
-                  <button type="button" className="btn-secondary" onClick={copyWebhook} style={{ whiteSpace: 'nowrap', fontSize: 11, padding: '6px 12px' }}>
-                    {copiedWebhook ? '✓ Copied' : 'Copy'}
-                  </button>
+                Meta Cloud API has been removed. Messages from {selectedPlatform === 'whatsapp' ? 'WhatsApp' : selectedPlatform === 'messenger' ? 'Messenger' : 'Instagram'} are intercepted directly on your Android phone and replies are sent through native RemoteInput.
+                <div style={{ marginTop: 6, fontSize: 11, color: '#8B949E' }}>
+                  Pair your phone using the <b>Phone Bridge</b> section on this page to start syncing messages in real time with zero API fees.
                 </div>
               </div>
             )}

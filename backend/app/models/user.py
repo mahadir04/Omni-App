@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Text, func
+from sqlalchemy import DateTime, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,10 +20,10 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        nullable=False, server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     # ── Relationships ────────────────────────────────────────────────────
@@ -47,4 +47,7 @@ class User(Base):
     )
     audit_logs = relationship(
         "AuditLog", back_populates="user", cascade="all, delete-orphan"
+    )
+    device_connections = relationship(
+        "DeviceConnection", back_populates="user", cascade="all, delete-orphan"
     )
