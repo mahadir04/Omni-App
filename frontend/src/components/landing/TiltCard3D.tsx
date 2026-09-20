@@ -45,6 +45,28 @@ export default function TiltCard3D({
     setCoords({ x: 0, y: 0 });
   };
 
+  const handleTouchStart = () => {
+    setIsHovered(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!cardRef.current || !e.touches[0]) return;
+    const touch = e.touches[0];
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const normX = Math.max(-1, Math.min(1, (x - centerX) / centerX));
+    const normY = Math.max(-1, Math.min(1, (y - centerY) / centerY));
+    setCoords({ x: normX, y: normY });
+  };
+
+  const handleTouchEnd = () => {
+    setIsHovered(false);
+    setCoords({ x: 0, y: 0 });
+  };
+
   const rotateX = isHovered ? -coords.y * maxTilt : 0;
   const rotateY = isHovered ? coords.x * maxTilt : 0;
   const currentScale = isHovered ? scale : 1;
@@ -59,6 +81,10 @@ export default function TiltCard3D({
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       className={`relative transition-transform duration-200 ease-out will-change-transform ${className}`}
       style={{
         perspective: 1200,

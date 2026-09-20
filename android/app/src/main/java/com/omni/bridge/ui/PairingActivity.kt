@@ -127,6 +127,7 @@ fun PairingScreen(
                             app.sessionStore.serverUrl = serverUrl.trim()
                             app.sessionStore.deviceId = result.device_id
                             app.sessionStore.deviceSecret = result.device_secret
+                            app.sessionStore.jwtToken = jwtToken.trim()
                             onPaired()
                         } else {
                             error = "Pairing failed — check URL and token, then try again"

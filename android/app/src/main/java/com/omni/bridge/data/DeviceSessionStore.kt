@@ -47,14 +47,25 @@ class DeviceSessionStore(context: Context) {
         get() = prefs.getString(KEY_USER_EMAIL, null)
         set(v) = prefs.edit().putString(KEY_USER_EMAIL, v).apply()
 
+    var jwtToken: String?
+        get() = prefs.getString(KEY_JWT_TOKEN, null)
+        set(v) = prefs.edit().putString(KEY_JWT_TOKEN, v).apply()
+
     val isPaired: Boolean
         get() = deviceId != null && deviceSecret != null && serverUrl != null
 
-    fun saveSession(serverUrl: String, deviceId: String, deviceSecret: String, userEmail: String? = null) {
+    fun saveSession(
+        serverUrl: String,
+        deviceId: String,
+        deviceSecret: String,
+        userEmail: String? = null,
+        jwtToken: String? = null
+    ) {
         this.serverUrl = serverUrl
         this.deviceId = deviceId
         this.deviceSecret = deviceSecret
         this.userEmail = userEmail
+        if (jwtToken != null) this.jwtToken = jwtToken
     }
 
     fun clearSession() {
@@ -66,5 +77,6 @@ class DeviceSessionStore(context: Context) {
         private const val KEY_DEVICE_SECRET = "device_secret"
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_USER_EMAIL = "user_email"
+        private const val KEY_JWT_TOKEN = "jwt_token"
     }
 }
